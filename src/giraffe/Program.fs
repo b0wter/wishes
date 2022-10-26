@@ -77,8 +77,15 @@ let configureCors (builder : CorsPolicyBuilder) =
        .AllowAnyHeader()
        |> ignore
 
+let onShutdown (services: IServiceProvider) =
+    let repo = services.GetService<Repository.InMemory<Guid, Wishlists.Wishlist>>()
+    repo.SaveToFile wishlistFile
+
 let configureApp (app : IApplicationBuilder) =
     let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
+    let lifetime = app.ApplicationServices.GetService<IHostApplicationLifetime>()
+    do lifetime.ApplicationStopping.Register(fun () -> onShutdown app.ApplicationServices) |> ignore
+    do isDevelopment <- env.IsDevelopment()
     (match env.IsDevelopment() with
     | true  ->
         app.UseDeveloperExceptionPage()
