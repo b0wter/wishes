@@ -81,7 +81,7 @@ let configureCors (builder : CorsPolicyBuilder) =
 
 let onShutdown (services: IServiceProvider) =
     let repo = services.GetService<Repository.InMemory<Guid, Wishlists.Wishlist>>()
-    repo.SaveToFile wishlistFile
+    repo.Save ()
 
 let configureApp (app : IApplicationBuilder) =
     let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
@@ -110,16 +110,17 @@ let configureServices (services : IServiceCollection) =
         services.AddSingleton<Json.ISerializer>(SystemTextJson.Serializer(serializationOptions)) |> ignore
         s
         
+    let createRepository (s: IServiceProvider) =
+        let logger = s.GetService<ILogger>()
+        if wishlistFile |> File.Exists then
+            Repository.InMemory.FromFile<Guid, Wishlists.Wishlist>(wishlistFile, logger)
+        else
+            Repository.InMemory.Empty<Guid, Wishlists.Wishlist>(wishlistFile, logger)
+        
     services.AddCors()    |> ignore
     services.AddGiraffe() |> ignore
     services |> addCustomJsonHandling |> ignore
-    services.AddSingleton<Repository.InMemory<Guid, Wishlists.Wishlist>>
-        (fun _ ->
-            if wishlistFile |> File.Exists then
-                Repository.InMemory.FromFile<Guid, Wishlists.Wishlist>(wishlistFile)
-            else
-                Repository.InMemory.Empty<Guid, Wishlists.Wishlist>())
-        |> ignore
+    services.AddSingleton<Repository.InMemory<Guid, Wishlists.Wishlist>>(createRepository) |> ignore
 
 let configureLogging (builder : ILoggingBuilder) =
     builder.AddConsole()
