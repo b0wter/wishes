@@ -9,6 +9,6 @@ module List =
             match remaining with
             | [] -> list
             | head :: tail ->
-                if head |> predicate then accumulator @ remaining
+                if head |> predicate then accumulator @ tail
                 else step tail (head :: accumulator)
         step list []
