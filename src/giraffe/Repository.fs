@@ -33,6 +33,9 @@ module Repository =
             if id |> dict.ContainsKey then Some dict[id]
             else None
 
+        member __.GetWishlists () =
+            dict.Values |> List.ofSeq
+        
         member __.SaveToFile filename =
             let serialized = dict |> System.Text.Json.JsonSerializer.Serialize
             System.IO.File.WriteAllText(filename, serialized)

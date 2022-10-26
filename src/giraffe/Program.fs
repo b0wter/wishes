@@ -11,7 +11,7 @@ open Microsoft.Extensions.DependencyInjection
 open Giraffe
 
 let wishlistFile = "wishlists.json"
-
+let mutable isDevelopment = false
 
 let defaultErrorHandler (statusCode: int, reasons: string list) : HttpHandler =
     setStatusCode statusCode >=> json {| Errors = reasons |}
@@ -39,6 +39,8 @@ let webApp =
     choose [
         GET >=>
             choose [
+                // following route uses verbose syntax because `isDevelopment` needs to be evaluated at call time
+                route  "/wishlists"                 >=> fun next ctx -> Wishlists.ShowAll.handler isDevelopment next ctx
                 routef "/wishlists/%O"              (fun id      -> Wishlists.Show.handler id)
                 routef "/wishlists/%O/%O"           (fun idTuple -> Wishlists.ShowWish.handler idTuple)
                 routef "/wishlists/%O/%O/complete"  (fun idTuple -> Wishlists.MarkWishAs.Completed.handler idTuple)

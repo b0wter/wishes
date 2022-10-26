@@ -110,6 +110,19 @@ module Wishlists =
                                        Error = Errors["wishlist_1"]
                                        ErrorCode = "wishlist_1" |}
                 } |> HttpUtilities.mapErrorToResponse ctx
+
+    module ShowAll =
+        let handler isDevelopment =
+            fun (_: HttpFunc) (ctx: HttpContext) ->
+                taskResult {
+                    if isDevelopment then
+                        let repo = ctx.GetService<WishlistRepo>()
+                        let all = repo.GetWishlists()
+                        return! ctx.WriteJsonAsync all
+                    else
+                        do ctx.SetStatusCode 404
+                        return! ctx.WriteStringAsync String.Empty
+                } |> HttpUtilities.mapErrorToResponse ctx
             
     module ShowWish =
         let handler (listId: Guid, wishId: Guid) =
@@ -184,14 +197,14 @@ module Wishlists =
 
     module AddWish =
         type Payload = {
-            Title: string
+            Name: string
             Description: string option
             Urls: string list option
         }
 
         let validateAndTransform (payload: Payload) =
             validation {
-                let! validatedTitle = payload.Title |> Validations.Name.all
+                let! validatedTitle = payload.Name |> Validations.Name.all
                 and! validatedDesc =
                     match payload.Description with
                     | Some desc ->
@@ -222,7 +235,7 @@ module Wishlists =
                     | Some list ->
                         let updatedList = { list with Wishes = wish :: list.Wishes }
                         do repo.AddOrUpdate (list.Id, updatedList) |> ignore
-                        return! ctx.WriteJsonAsync {| WasAdded = true |}
+                        return! ctx.WriteJsonAsync wish
                     | None ->
                         ctx.SetStatusCode 404
                         return! ctx.WriteJsonAsync 
