@@ -2,9 +2,11 @@ module Wishes.Giraffe.App
 
 open System
 open System.IO
+open System.Text.Json.Serialization
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Cors.Infrastructure
 open Microsoft.AspNetCore.Hosting
+open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.DependencyInjection
@@ -31,10 +33,19 @@ let defaultBindJsonWithArg<'a, 'b> =
 
 let defaultBindJsonAndValidate<'a, 'b> =
     HttpUtilities.tryBindJsonAndTransform<'a, 'b> defaultErrorHandler
+    
+let defaultBindJsonAndTransformWithExtra<'a, 'b, 'c> =
+    HttpUtilities.tryBindJsonAndTransformWithExtra<'a, 'b, 'c> defaultErrorHandler
 
-//let defaultBindJsonAndTransformWithArg<'payload, 'entity, 'extra> =
-//    HttpUtilities.tryBindJsonAndTransformWithExtra<'payload, 'entity, 'extra> jsonParsingError
-
+let mustHaveToken wishlistId =
+    let tryGetWishlist (ctx: HttpContext) =
+        let repo = ctx.GetService<Wishlists.WishlistRepo>()
+        wishlistId |> repo.TryGetWishListById
+        
+    let validator (token: string) (wishlist: Wishlists.Wishlist) : bool =
+        wishlist.Token = token
+        
+    HttpUtilities.mustHaveToken "token" Some tryGetWishlist validator
 
 let webApp =
     choose [
@@ -50,12 +61,12 @@ let webApp =
         POST >=>
             choose [
                 route  "/wishlists"                 >=> defaultBindJsonAndValidate Wishlists.New.validateAndTransform Wishlists.New.handler
-                routef "/wishlists/%O/addwish"      (fun id -> defaultBindJsonAndValidate Wishlists.AddWish.validateAndTransform (Wishlists.AddWish.handler id))
+                routef "/wishlists/%O/addwish"      (fun id -> mustHaveToken id (defaultBindJsonAndTransformWithExtra Wishlists.AddWish.validateAndTransform Wishlists.AddWish.handler))
             ]
         DELETE >=>
             choose [
-                routef "/wishlists/%O"              (fun id -> Wishlists.Delete.handler id)
-                routef "/wishlists/%O/%O"           (fun idTuple -> Wishlists.DeleteWish.handler idTuple)
+                routef "/wishlists/%O"              (fun id -> mustHaveToken id Wishlists.Delete.handler)
+                routef "/wishlists/%O/%O"           (fun (listId, wishId) -> mustHaveToken listId (Wishlists.DeleteWish.handler wishId))
             ]
         setStatusCode 404                           >=> text "Not Found" ]
 
@@ -102,6 +113,7 @@ let configureApp (app : IApplicationBuilder) =
 let configureServices (services : IServiceCollection) =
     let addCustomJsonHandling (s: IServiceCollection) =
         let serializationOptions = SystemTextJson.Serializer.DefaultOptions
+        serializationOptions.DefaultIgnoreCondition <- JsonIgnoreCondition.WhenWritingNull
         serializationOptions.Converters.Add(Json.ListConverter())
         serializationOptions.Converters.Add(Json.MapConverter())
         serializationOptions.Converters.Add(Json.OptionConverter())

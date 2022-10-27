@@ -13,6 +13,7 @@ module Wishlists =
         Name: string
         Description: string option
         Wishes: Wishes.Wish list
+        Token: string
     }
     
     let findWish wishId list =
@@ -86,6 +87,7 @@ module Wishlists =
                 Name = name
                 Description = description
                 Wishes = []
+                Token = Utilities.generateToken 32
             }
         
         static member CreateWith(name, description) =
@@ -94,6 +96,7 @@ module Wishlists =
                 Name = name
                 Description = description
                 Wishes = []
+                Token = Utilities.generateToken 32
             }
     
     module Show =
@@ -103,7 +106,7 @@ module Wishlists =
                     let repo = ctx.GetService<WishlistRepo>()
                     match id |> repo.TryGetWishListById with
                     | Some wishlist ->
-                        return! ctx.WriteJsonAsync wishlist
+                        return! ctx.WriteJsonAsync { wishlist with Token = null }
                     | None ->
                         ctx.SetStatusCode 404
                         return! ctx.WriteJsonAsync
@@ -180,11 +183,11 @@ module Wishlists =
                 } |> HttpUtilities.mapErrorToResponse ctx
 
     module Delete =
-        let handler (listId: Guid) =
+        let handler (list: Wishlist) =
             fun (_: HttpFunc) (ctx: HttpContext) ->
                 taskResult {
                     let repo = ctx.GetService<WishlistRepo>()
-                    let wasRemoved = listId |> repo.TryRemove
+                    let wasRemoved = list.Id |> repo.TryRemove
                     match wasRemoved with
                     | Some result ->
                         return! ctx.WriteJsonAsync {| WasRemoved = result |}
@@ -228,45 +231,30 @@ module Wishlists =
                     }
             }
             
-        let handler (listId: Guid) (wish: Wishes.Wish) =
+        //let handler (listId: Guid) (wish: Wishes.Wish) =
+        let handler (wish: Wishes.Wish) (wishlist: Wishlist) =
             fun (_: HttpFunc) (ctx: HttpContext) ->
                 taskResult {
                     let repo = ctx.GetService<WishlistRepo>()
-                    match listId |> repo.TryGetWishListById with
-                    | Some list ->
-                        let updatedList = { list with Wishes = wish :: list.Wishes }
-                        do repo.AddOrUpdate (list.Id, updatedList) |> ignore
-                        return! ctx.WriteJsonAsync wish
-                    | None ->
-                        ctx.SetStatusCode 404
-                        return! ctx.WriteJsonAsync 
-                                    {| WasAdded = false
-                                       Error = Errors["wishlist_1"]
-                                       ErrorCode = "wishlist_1" |}
+                    let updatedList = { wishlist with Wishes = wish :: wishlist.Wishes }
+                    do repo.AddOrUpdate (wishlist.Id, updatedList) |> ignore
+                    return! ctx.WriteJsonAsync wish
                 } |> HttpUtilities.mapErrorToResponse ctx
 
     module DeleteWish =
-        let handler (listId: Guid, wishId: Guid) =
+        let handler (wishId: Guid) (list: Wishlist) =
             fun (_: HttpFunc) (ctx: HttpContext) ->
                 taskResult {
                     let repo = ctx.GetService<WishlistRepo>()
-                    let maybeList = listId |> repo.TryGetWishListById
-                    let doesWishExist = maybeList |> Option.map (fun list -> list.Wishes |> List.exists (fun w -> w.Id = wishId))
-                    
-                    match maybeList, doesWishExist with
-                    | Some list, Some true ->
+                    let doesWishExist = list.Wishes |> List.exists (fun w -> w.Id = wishId)
+                    if doesWishExist then
                         let updatedList = list |> removeWishByIdFrom wishId
-                        let persistedList = (listId, updatedList) |> repo.AddOrUpdate
+                        let persistedList = (updatedList.Id, updatedList) |> repo.AddOrUpdate
                         return! persistedList |> ctx.WriteJsonAsync
-                    | Some _, Some false
-                    | Some _, None ->
+                    else
                         ctx.SetStatusCode 404
                         return! ctx.WriteJsonAsync {| Error = Errors["wishlist_2"]
                                                       ErrorCode = "wishlist_2" |}
-                    | None, _ ->
-                        ctx.SetStatusCode 404
-                        return! ctx.WriteJsonAsync {| Error = Errors["wishlist_1"]
-                                                      ErrorCode = "wishlist_1" |}
                 } |> HttpUtilities.mapErrorToResponse ctx
 
     module MarkWishAs =

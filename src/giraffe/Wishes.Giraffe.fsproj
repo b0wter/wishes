@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="Utilities.fs" />
     <Compile Include="Service.fs" />
     <Compile Include="Json.fs" />
     <Compile Include="Extensions.fs" />

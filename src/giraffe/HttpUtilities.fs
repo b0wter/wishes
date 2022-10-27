@@ -1,12 +1,36 @@
 namespace Wishes.Giraffe
 
-open System
 open System.Threading.Tasks
 open Giraffe
 open Microsoft.AspNetCore.Http
 open FsToolkit.ErrorHandling
 
 module HttpUtilities =
+        
+        let mustHaveToken tokenName (parseToken: string -> 'key option) (tryGetValue: HttpContext -> 'value option) (isValid: 'key -> 'value -> bool) (successHandler: 'value -> HttpHandler) : HttpHandler =
+            fun (next: HttpFunc) (ctx: HttpContext) ->
+                task {
+                    let maybeToken =
+                        tokenName
+                        |> ctx.TryGetQueryStringValue
+                        |> Option.bind parseToken
+                    let maybeValue = tryGetValue ctx
+                    match maybeToken, maybeValue with
+                    | Some token, Some value ->
+                        if isValid token value then
+                            return! successHandler value next ctx
+                        else
+                            do ctx.SetStatusCode 403
+                            return! ctx.WriteJsonAsync {| Errors = [ "The given auth token is invalid"  ] |}
+                    | Some _, None ->
+                        do ctx.SetStatusCode 403
+                        return! ctx.WriteJsonAsync {| Errors = [ "The given auth token is invalid"  ] |}
+                    | None, _ ->
+                        do ctx.SetStatusCode 403
+                        return! ctx.WriteJsonAsync {| Errors = [ $"You have not supplied an auth token as query parameter '%s{tokenName}'"  ] |}
+                }
+                    
+        
         /// Converts the result of a `taskResult` computational expression into a `HttpContext option`
         let mapErrorToResponse (ctx: HttpContext) (result: Task<Result<HttpContext option, string>>) : Task<HttpContext option> =
             task {
@@ -91,3 +115,17 @@ module HttpUtilities =
                         return! errorHandler (400, errorMessages) next ctx
                 }
                 
+        let tryBindJsonAndTransformWithExtra<'payload, 'entity, 'extra> (errorHandler: int * string list -> HttpHandler) (validator: 'payload -> Validation<'entity, string>) (successHandler: 'entity -> 'extra -> HttpHandler) (extra: 'extra): HttpHandler =
+            let inline isNullMatch value = obj.ReferenceEquals(value, null)
+            fun (next : HttpFunc) (ctx : HttpContext) ->
+                task {
+                    try
+                        let! model = ctx.BindJsonAsync<'payload>()
+                        if model |> isNullMatch then
+                            return! errorHandler (400, [ "The request body is empty" ]) next ctx
+                        else
+                            return! handleWithExtra ctx next validator errorHandler successHandler extra model
+                    with ex ->
+                        let errorMessages = [ sprintf $"Malformed request or missing field in request body, reason: %s{ex.Message}" ]
+                        return! errorHandler (400, errorMessages) next ctx
+                }
