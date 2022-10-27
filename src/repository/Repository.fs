@@ -1,4 +1,4 @@
-namespace Wishes.Giraffe
+namespace Wishes.Repository
 
 open System
 open System.Collections.Concurrent
@@ -8,31 +8,25 @@ module Repository =
     
     type private Dict<'key, 'value> = ConcurrentDictionary<'key, 'value>
     
-    type InMemory<'key, 'value> private (dict: Dict<'key, 'value>, filename: string, logger: ILogger) =
-        let mutable lastSavedAt = DateTime.Now
-        let saveIntervall = TimeSpan.FromMinutes(1.0)
-
+    type InMemory<'key, 'value> private (dict: Dict<'key, 'value>, filename: string, logger: ILogger<InMemory<'key, 'value>>) =
+        let mutable newChange = false
+ 
         let saveToFile filename =
             logger.LogInformation "Trying to save repository to file"
             let serialized = dict |> System.Text.Json.JsonSerializer.Serialize
             System.IO.File.WriteAllText(filename, serialized)
             logger.LogInformation "Repository written to file"
-            
-        let saveIfSaveIntervalPassed () =
-            let timePassed = DateTime.Now - lastSavedAt
-            if timePassed > saveIntervall then
-                lastSavedAt <- DateTime.Now
-                saveToFile filename
-            else ()
+        
+        member __.HasChangedSinceLastSave =
+            newChange
         
         member __.AddOrUpdate (key: 'key, value: 'value) =
             let factory = fun _ -> fun _ -> value
-            let value = dict.AddOrUpdate(
+            newChange <- true
+            dict.AddOrUpdate(
                 key,
                 value,
                 factory)
-            do saveIfSaveIntervalPassed ()
-            value
             
         /// <summary>
         /// Tries to remove a key value pair. If this does not succeed it is most likely
@@ -45,7 +39,11 @@ module Repository =
         member __.TryRemove key =
             if key |> dict.ContainsKey then
                 let success, _ = dict.TryRemove key
-                Some success
+                if success then
+                    newChange <- true
+                    Some success
+                else
+                    Some success
             else None
             
         member __.TryGetWishListById id =
@@ -57,9 +55,15 @@ module Repository =
         
         member __.Save () =
             saveToFile filename
+            newChange <- false
+            
+        member __.SaveIfChanged () =
+            if newChange then __.Save ()
+            else ()
 
         member __.SaveToFile filename =
             saveToFile filename
+            newChange <- false
             
         static member FromFile<'key, 'value> (filename, logger) : InMemory<'key, 'value> =
             let lists =

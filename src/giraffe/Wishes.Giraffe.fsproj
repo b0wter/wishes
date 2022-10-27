@@ -16,10 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="Service.fs" />
     <Compile Include="Json.fs" />
     <Compile Include="Extensions.fs" />
     <Compile Include="HttpUtilities.fs" />
-    <Compile Include="Repository.fs" />
     <Compile Include="Wishes.fs" />
     <Compile Include="Wishlists.fs" />
     <Compile Include="Program.fs" />
@@ -30,5 +30,9 @@
     <Content Include="WebRoot\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\repository\Wishes.Repository.fsproj" />
   </ItemGroup>
 </Project>

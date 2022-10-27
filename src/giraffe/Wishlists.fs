@@ -5,6 +5,7 @@ open Microsoft.AspNetCore.Http
 open Giraffe
 open FsToolkit.ErrorHandling
 open Wishes.Giraffe.Extensions
+open Wishes.Repository
 
 module Wishlists =
     type Wishlist = {

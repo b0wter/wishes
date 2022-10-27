@@ -9,6 +9,7 @@ open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.DependencyInjection
 open Giraffe
+open Wishes.Repository
 
 let wishlistFile = "wishlists.json"
 let mutable isDevelopment = false
@@ -111,7 +112,7 @@ let configureServices (services : IServiceCollection) =
         s
         
     let createRepository (s: IServiceProvider) =
-        let logger = s.GetService<ILogger>()
+        let logger = s.GetService<ILogger<Repository.InMemory<Guid, Wishlists.Wishlist>>>()
         if wishlistFile |> File.Exists then
             Repository.InMemory.FromFile<Guid, Wishlists.Wishlist>(wishlistFile, logger)
         else
@@ -121,6 +122,7 @@ let configureServices (services : IServiceCollection) =
     services.AddGiraffe() |> ignore
     services |> addCustomJsonHandling |> ignore
     services.AddSingleton<Repository.InMemory<Guid, Wishlists.Wishlist>>(createRepository) |> ignore
+    services.AddHostedService<Services.RepositorySaveService<Guid, Wishlists.Wishlist>>() |> ignore
 
 let configureLogging (builder : ILoggingBuilder) =
     builder.AddConsole()
