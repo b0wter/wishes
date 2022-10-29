@@ -231,7 +231,6 @@ module Wishlists =
                     }
             }
             
-        //let handler (listId: Guid) (wish: Wishes.Wish) =
         let handler (wish: Wishes.Wish) (wishlist: Wishlist) =
             fun (_: HttpFunc) (ctx: HttpContext) ->
                 taskResult {
