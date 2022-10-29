@@ -237,7 +237,7 @@ module Wishlists =
                     let repo = ctx.GetService<WishlistRepo>()
                     let updatedList = { wishlist with Wishes = wish :: wishlist.Wishes }
                     do repo.AddOrUpdate (wishlist.Id, updatedList) |> ignore
-                    return! ctx.WriteJsonAsync wish
+                    return! ctx.WriteJsonAsync {| wishlist = updatedList; newWishId = wish.Id |}
                 } |> HttpUtilities.mapErrorToResponse ctx
 
     module DeleteWish =
