@@ -20,6 +20,16 @@ let wishlistFile =
     else
         fromEnv
 
+let corsOrigins =
+    let fromEnv = Environment.GetEnvironmentVariable("WISHES_ORIGINS")
+    if fromEnv |> String.IsNullOrWhiteSpace then
+        [|
+            "http://localhost:5000"
+            "https://localhost:5001"
+        |]
+    else
+        fromEnv.Split("%%")
+
 let mutable isDevelopment = false
 
 let defaultErrorHandler (statusCode: int, reasons: string list) : HttpHandler =
@@ -93,9 +103,7 @@ let errorHandler (ex : Exception) (logger : ILogger) =
 
 let configureCors (builder : CorsPolicyBuilder) =
     builder
-        .WithOrigins(
-            "http://localhost:5000",
-            "https://localhost:5001")
+       .WithOrigins(corsOrigins)
        .AllowAnyMethod()
        .AllowAnyHeader()
        |> ignore
