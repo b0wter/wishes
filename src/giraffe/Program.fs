@@ -61,6 +61,9 @@ let webApp =
                 route  "/wishlists"                 >=> fun next ctx -> Wishlists.ShowAll.handler isDevelopment next ctx
                 routef "/wishlists/%O"              (fun id      -> Wishlists.Show.handler id)
                 routef "/wishlists/%O/%O"           (fun idTuple -> Wishlists.ShowWish.handler idTuple)
+            ]
+        PATCH >=>
+            choose [
                 routef "/wishlists/%O/%O/complete"  (fun idTuple -> Wishlists.MarkWishAs.Completed.handler idTuple)
                 routef "/wishlists/%O/%O/uncomplete"(fun idTuple -> Wishlists.MarkWishAs.NotCompleted.handler idTuple)
             ]
