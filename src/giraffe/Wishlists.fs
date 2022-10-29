@@ -22,7 +22,7 @@ module Wishlists =
     let updateWishIn list wish =
         {
             list with
-                Wishes = wish :: (list.Wishes |> List.removeFirst (fun w -> w.Id <> wish.Id))
+                Wishes = wish :: (list.Wishes |> List.removeFirst (fun w -> w.Id = wish.Id))
         }
         
     let removeWishFrom wish list =
