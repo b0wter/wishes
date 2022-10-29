@@ -137,6 +137,7 @@ let configureServices (services : IServiceCollection) =
         serializationOptions.Converters.Add(Json.ListValueConverter())
         serializationOptions.Converters.Add(Json.MapValueConverter())
         serializationOptions.Converters.Add(Json.OptionValueConverter())
+        serializationOptions.Converters.Add(Wishlists.RemoveWishlistTokenConverter())
         services.AddSingleton<Json.ISerializer>(SystemTextJson.Serializer(serializationOptions)) |> ignore
         s
         
