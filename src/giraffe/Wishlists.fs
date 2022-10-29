@@ -22,7 +22,7 @@ module Wishlists =
     let updateWishIn list wish =
         {
             list with
-                Wishes = wish :: (list.Wishes |> List.where (fun w -> w.Id <> wish.Id))
+                Wishes = wish :: (list.Wishes |> List.removeFirst (fun w -> w.Id <> wish.Id))
         }
         
     let removeWishFrom wish list =
@@ -276,7 +276,7 @@ module Wishlists =
                     | IsNotCompleted -> false
                 let updatedWish = { wish with IsCompleted = completed }
                 let updatedList = updatedWish |> updateWishIn list
-                let persisted = repo.AddOrUpdate (wish.Id, updatedList)
+                let persisted = repo.AddOrUpdate (listId, updatedList)
                 ctx.WriteJsonAsync persisted
             | Some _, None ->
                 ctx.SetStatusCode 404
