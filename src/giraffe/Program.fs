@@ -13,7 +13,13 @@ open Microsoft.Extensions.DependencyInjection
 open Giraffe
 open Wishes.Repository
 
-let wishlistFile = "wishlists.json"
+let wishlistFile =
+    let fromEnv = Environment.GetEnvironmentVariable("WISHES_FILENAME")
+    if fromEnv |> String.IsNullOrWhiteSpace then
+        "wishlists.json"
+    else
+        fromEnv
+
 let mutable isDevelopment = false
 
 let defaultErrorHandler (statusCode: int, reasons: string list) : HttpHandler =

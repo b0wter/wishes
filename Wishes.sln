@@ -9,6 +9,14 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Wishes.Giraffe", "src\giraf
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Wishes.Repository", "src\repository\Wishes.Repository.fsproj", "{5EE21781-D828-4673-A4F1-820D30E45439}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "fable", "fable", "{EF2CB8E9-4ED7-4DF4-98EF-FF5BF582A78E}"
+	ProjectSection(SolutionItems) = preProject
+		src\fable\public\index.html = src\fable\public\index.html
+		src\fable\public\fable.ico = src\fable\public\fable.ico
+	EndProjectSection
+EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "App", "src\fable\src\App.fsproj", "{1A58EF15-532A-4D45-81F0-399D5CDAD1D9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,9 +34,15 @@ Global
 		{5EE21781-D828-4673-A4F1-820D30E45439}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5EE21781-D828-4673-A4F1-820D30E45439}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5EE21781-D828-4673-A4F1-820D30E45439}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1A58EF15-532A-4D45-81F0-399D5CDAD1D9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A58EF15-532A-4D45-81F0-399D5CDAD1D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A58EF15-532A-4D45-81F0-399D5CDAD1D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A58EF15-532A-4D45-81F0-399D5CDAD1D9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{55CA3F20-102F-474B-A7A5-080F9C3E6A7F} = {79D4B278-F912-4AA0-AF19-D6E301C03D11}
 		{5EE21781-D828-4673-A4F1-820D30E45439} = {79D4B278-F912-4AA0-AF19-D6E301C03D11}
+		{EF2CB8E9-4ED7-4DF4-98EF-FF5BF582A78E} = {79D4B278-F912-4AA0-AF19-D6E301C03D11}
+		{1A58EF15-532A-4D45-81F0-399D5CDAD1D9} = {EF2CB8E9-4ED7-4DF4-98EF-FF5BF582A78E}
 	EndGlobalSection
 EndGlobal
