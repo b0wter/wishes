@@ -9,6 +9,7 @@ module Wishes =
         Description: string option
         Urls: Uri list
         IsCompleted: bool
+        CreationTime: DateTime
     }
     
     [<AbstractClass; Sealed>]
@@ -23,5 +24,6 @@ module Wishes =
                     |> Option.map List.singleton
                     |> Option.defaultValue []
                 IsCompleted = false
+                CreationTime = DateTime.Now
             }
 
