@@ -1,7 +1,6 @@
-namespace Wishes.Giraffe.Extensions
+namespace Wishes.Shared
 
 module List =
-    
     /// Removes the first element of the list that matches the given predicate. Use this if you are sure that there is
     /// only a single matching element (e.g. when looking for an id) to not traverse the whole list
     let removeFirst predicate list =

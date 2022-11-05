@@ -1,4 +1,4 @@
-namespace Wishes.Giraffe
+namespace Wishes.Shared
 
 open System
 
@@ -24,3 +24,4 @@ module Wishes =
                     |> Option.defaultValue []
                 IsCompleted = false
             }
+

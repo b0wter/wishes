@@ -19,9 +19,7 @@
     <Compile Include="Utilities.fs" />
     <Compile Include="Service.fs" />
     <Compile Include="Json.fs" />
-    <Compile Include="Extensions.fs" />
     <Compile Include="HttpUtilities.fs" />
-    <Compile Include="Wishes.fs" />
     <Compile Include="Wishlists.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
@@ -35,5 +33,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\repository\Wishes.Repository.fsproj" />
+    <ProjectReference Include="..\shared\Wishes.Shared.fsproj" />
   </ItemGroup>
 </Project>

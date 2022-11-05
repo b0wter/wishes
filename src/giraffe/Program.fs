@@ -12,6 +12,7 @@ open Microsoft.Extensions.Logging
 open Microsoft.Extensions.DependencyInjection
 open Giraffe
 open Wishes.Repository
+open Wishes.Shared
 
 let wishlistFile =
     let fromEnv = Environment.GetEnvironmentVariable("WISHES_FILENAME")
@@ -26,6 +27,7 @@ let corsOrigins =
         [|
             "http://localhost:5000"
             "https://localhost:5001"
+            "http://localhost:8081"
         |]
     else
         fromEnv.Split("%%")
@@ -119,13 +121,15 @@ let configureApp (app : IApplicationBuilder) =
     do isDevelopment <- env.IsDevelopment()
     (match env.IsDevelopment() with
     | true  ->
-        app.UseDeveloperExceptionPage()
+        app
+         .UseDeveloperExceptionPage()
     | false ->
-        app .UseGiraffeErrorHandler(errorHandler)
-            .UseHttpsRedirection())
-        .UseCors(configureCors)
-        .UseStaticFiles()
-        .UseGiraffe(webApp)
+        app
+         .UseGiraffeErrorHandler(errorHandler)
+         .UseHttpsRedirection())
+         .UseStaticFiles()
+         .UseCors("_defaultCorsPolicy")
+         .UseGiraffe(webApp)
 
 let configureServices (services : IServiceCollection) =
     let addCustomJsonHandling (s: IServiceCollection) =
@@ -148,7 +152,12 @@ let configureServices (services : IServiceCollection) =
         else
             Repository.InMemory.Empty<Guid, Wishlists.Wishlist>(wishlistFile, logger)
         
-    services.AddCors()    |> ignore
+    services.AddCors(fun options ->
+            options.AddPolicy( "_defaultCorsPolicy", fun policy ->
+                    do printfn "Adding cors for origins: %A" corsOrigins
+                    policy.AllowAnyHeader().AllowAnyMethod().WithOrigins(corsOrigins) |> ignore
+                )
+        ) |> ignore
     services.AddGiraffe() |> ignore
     services |> addCustomJsonHandling |> ignore
     services.AddSingleton<Repository.InMemory<Guid, Wishlists.Wishlist>>(createRepository) |> ignore
