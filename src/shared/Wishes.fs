@@ -9,7 +9,7 @@ module Wishes =
         Description: string option
         Urls: Uri list
         IsCompleted: bool
-        CreationTime: DateTime
+        CreationTime: DateTimeOffset
     }
     
     [<AbstractClass; Sealed>]
@@ -24,6 +24,6 @@ module Wishes =
                     |> Option.map List.singleton
                     |> Option.defaultValue []
                 IsCompleted = false
-                CreationTime = DateTime.Now
+                CreationTime = DateTimeOffset.UtcNow
             }
 

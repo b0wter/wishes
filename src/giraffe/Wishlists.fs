@@ -70,7 +70,7 @@ module Wishlists =
                 Description = description
                 Wishes = []
                 Token = Utilities.generateToken 32
-                CreationTime = DateTime.Now
+                CreationTime = DateTimeOffset.UtcNow
             }
         
         static member CreateWith(name, description) =
@@ -80,7 +80,7 @@ module Wishlists =
                 Description = description
                 Wishes = []
                 Token = Utilities.generateToken 32
-                CreationTime = DateTime.Now
+                CreationTime = DateTimeOffset.UtcNow
             }
     
     module Show =

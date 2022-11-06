@@ -9,7 +9,7 @@ module Wishlists =
         Description: string option
         Wishes: Wishes.Wish list
         Token: string
-        CreationTime: DateTime
+        CreationTime: DateTimeOffset
     }
     
     type NonSensitiveWishlist = {
@@ -17,7 +17,7 @@ module Wishlists =
         Name: string
         Description: string option
         Wishes: Wishes.Wish list
-        CreationTime: DateTime
+        CreationTime: DateTimeOffset
     }
     
     let asNonSensitive (list: Wishlist) : NonSensitiveWishlist =
