@@ -473,8 +473,8 @@ updateWelcome msg welcomeModel model =
                     -}
                     let
                         cmd =
-                            [ Task.perform GotNow Time.now
-                            , Nav.pushUrl model.navKey ("/wishlists/" ++ (newWishlist.wishlist.id |> UUID.toString) ++ "?token=" ++ newWishlist.token)
+                            [ Nav.pushUrl model.navKey ("/wishlists/" ++ (newWishlist.wishlist.id |> UUID.toString) ++ "?token=" ++ newWishlist.token)
+                            , Task.perform GotNow Time.now
                             ]
                     in
                     ( { model | state =
@@ -569,7 +569,7 @@ updateLoadingWishlist msg loadingModel model =
                         , newWishUrl = ""
                         , newWishDescription = ""
                         , newWishName = ""
-                        } }, Cmd.none )
+                        } }, Task.perform GotNow Time.now )
                 Err e ->
                     let
                         _ = Debug.log "Retrieving the result of a create-new-wishlist-request is in error state" e
@@ -701,7 +701,7 @@ viewWishlistLoaded model loadedModel =
             |> Maybe.map (\t -> h4 [] [ text t ])
             |> Maybe.withDefault (div [] [])
         age =
-            Duration.from model.now loadedModel.wishlist.creationTime
+            Duration.from loadedModel.wishlist.creationTime model.now 
         ageInSeconds = age |> Duration.inSeconds
         ageInMinutes = age |> Duration.inMinutes
         ageInHours = age |> Duration.inHours
