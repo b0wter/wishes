@@ -430,13 +430,9 @@ update msg model =
         ( model, Cmd.none )
 
     GotTimezone zone ->
-        let _ = Debug.log "GotTimezone" zone
-        in
         ( { model | zone = zone }, Cmd.none )
         
     GotNow time ->
-        let _ = Debug.log "GotTime" time
-        in
         ( { model | now = time }, Cmd.none )
 
     MessageForWelcome welcomeMessage ->
@@ -486,9 +482,6 @@ updateWelcome msg welcomeModel model =
             ( { model | state = WelcomeState { welcomeModel | wishlistDescription = newDescription } }, Cmd.none )
 
         GotNewWishlist retrievalResult ->
-            let
-                _ = Debug.log "GotNewWishlist" retrievalResult
-            in
             case retrievalResult of
                 Ok newWishlist ->
                     {- There are two commands that need to be run once a new wish list was received:
@@ -529,9 +522,6 @@ updateWishlistLoaded : WishlistLoadedMsg -> WishlistLoadedModel -> Model -> (Mod
 updateWishlistLoaded msg loadedModel model =
     case msg of
         UpdatedWishlist retrievalResult ->
-            let
-                _ = Debug.log "UpdateWishlist" retrievalResult
-            in
             case retrievalResult of
                 Ok wishlist ->
                     let
@@ -579,9 +569,6 @@ updateWishlistLoaded msg loadedModel model =
 
 updateLoadingWishlist : LoadingWishlistMsg -> LoadingWishlistModel -> Model -> (Model, Cmd Msg)
 updateLoadingWishlist msg loadingModel model =
-    let
-        _ = Debug.log "updateLoadingWishlist" msg
-    in
     case msg of
         GotWishlistFromApi retrievalResult ->
             case retrievalResult of
@@ -782,9 +769,6 @@ viewWishlistLoaded model loadedModel =
         
         copyButtons =
             let
-                url =
-                    Url.Builder.absolute [ "foo", "bar", "?token=lel"]  []
-                _ = Debug.log "share url" url
                 buttons =
                     let
                         userUrl = model.baseUrl ++ "wishlists/" ++ (loadedModel.wishlist.id |> UUID.toString)
@@ -798,10 +782,6 @@ viewWishlistLoaded model loadedModel =
                         [ Button.button [ Button.primary, Button.attrs [ onClick (Copy "foo") ] ] [ text "Copy link to share" ] ]
             in
             div [ Spacing.mt2, Spacing.mb2 ] buttons
-                
-        _ = Debug.log "now" model.now
-        _ = Debug.log "creationDate" loadedModel.wishlist.creationTime
-        _ = Debug.log "age" age
     in
     div []
     [ h1 [] [ text loadedModel.wishlist.name ]
