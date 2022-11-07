@@ -659,25 +659,27 @@ viewLoadingWishlist _ =
 
 -- View if a wishlist has been loaded
 
-viewWish : Bool -> UUID -> String -> Wish -> Html Msg
-viewWish showDeleteButton wishlistId authToken wish =
+viewWish : Bool -> UUID -> String -> Time.Posix -> Wish -> Html Msg
+viewWish showDeleteButton wishlistId authToken now wish =
     let
-        name =
-            if wish.isCompleted then Html.del [] [ text wish.name ]
-            else div [] [ text wish.name ]
-            
-        description =
-            case wish.description of
-                Just desc -> Html.p [] [ text desc ]
-                Nothing -> div [] []
+        title =
+            if wish.isCompleted then
+                Block.titleH5 [] [ Html.del [] [ text wish.name ] ]
+            else
+                Block.titleH5 [] [ text wish.name ]
 
-        urls =
-            case wish.urls of
-                [] -> 
-                    div [] [ text "There are no links" ]
-                links ->
-                    div [] (links |> List.map (\l -> Html.a [ href l ] [ text l ]))
-                    
+        description =
+            wish.description
+            |> Maybe.map (\t -> Block.text [] [ text t ])
+                
+        links =
+            wish.urls |> List.indexedMap (\i u -> Just (Block.link [ href u ] [ text ("Example " ++ ((i + 1) |> String.fromInt))]))
+
+        blocks =
+            [ Just title
+            , description
+            ]
+            
         completionButton =
             let
                 (buttonText, buttonMsg) =
@@ -686,23 +688,27 @@ viewWish showDeleteButton wishlistId authToken wish =
                     else
                         ("Mark as bought", MessageForWishlistLoaded (MarkWishAsCompleted wishlistId wish.id))
             in
-            Button.button [ Button.primary, Button.small, Button.attrs [ Spacing.mr2, onClick buttonMsg ] ] [ text buttonText ] 
+            Just (Button.button [ Button.primary, Button.small, Button.attrs [ Spacing.mr2, onClick buttonMsg ] ] [ text buttonText ])
 
         deletionButton =
             if showDeleteButton then
-                Button.button [ Button.danger, Button.small, Button.attrs [ onClick (MessageForWishlistLoaded (DeleteWish wishlistId wish.id authToken)) ] ] [ text "Delete"]
-            else div [] []
+                Just (Button.button [ Button.danger, Button.small, Button.attrs [ onClick (MessageForWishlistLoaded (DeleteWish wishlistId wish.id authToken)) ] ] [ text "Delete"])
+            else Nothing
             
         buttons =
-            div [] [ completionButton, deletionButton ]
+            Just (Block.custom <| div [ Spacing.mt2 ] ([ completionButton, deletionButton ] |> Maybe.values))
             
+        all = (List.append (List.append blocks links) [ buttons ]) |> Maybe.values
+        
+        age = createAgeText "Added just now! 😱" "Added " " ago" wish.creationTime now
+        
+        mutedClass = if wish.isCompleted then "text-muted" else ""
     in
-    Html.li [ href "#", Spacing.mt2, class "list-group-item list-group-item-action flex-column align-items-start" ]
-    [ h4 [] [ name ]
-    , description
-    , urls
-    , buttons
-    ] 
+    Card.config [ Card.attrs [ class mutedClass, Spacing.mt2 ] ]
+        |> Card.block [] all
+        |> Card.footer [] [ small [] [ text age ] ]
+        |> Card.view
+
 
 viewWishlistLoaded : Model -> WishlistLoadedModel -> Html Msg
 viewWishlistLoaded model loadedModel =
@@ -711,29 +717,14 @@ viewWishlistLoaded model loadedModel =
             loadedModel.wishlist.description
             |> Maybe.map (\t -> h4 [] [ text t ])
             |> Maybe.withDefault (div [] [])
-        age =
-            Duration.from loadedModel.wishlist.creationTime model.now 
-        ageInSeconds = age |> Duration.inSeconds
-        ageInMinutes = age |> Duration.inMinutes
-        ageInHours = age |> Duration.inHours
-        ageInDays = age |> Duration.inDays
-        ageInMonths = ageInDays / 30.437
-        ageInYears = age |> Duration.inJulianYears
-        formattedAge =
-            if ageInSeconds <= 10 then "Created just now! 😱"
-            else if ageInMinutes <= 1 then "Created " ++ (ageInSeconds |> Round.floor 0) ++ " seconds ago"
-            else if ageInHours <= 1 then "Created " ++ (ageInMinutes |> Round.floor 0) ++ " minutes ago"
-            else if ageInDays <= 1 then "Created " ++ (ageInHours |> Round.floor 0) ++ " hours ago"
-            else if ageInMonths <= 1 then "Created " ++ (ageInDays |> Round.floor 0) ++ " days ago"
-            else if ageInYears <= 1 then "Created " ++ (ageInMonths |> Round.floor 0) ++ " months ago"
-            else "Created " ++ (ageInYears |> Round.floor 0) ++ " years ago"
+        formattedAge = createAgeText "Created just now! 😱" "Created " " ago" loadedModel.wishlist.creationTime model.now
         isAuthTokenSet = loadedModel.currentToken |> Maybe.isJust
         token = (loadedModel.currentToken |> Maybe.withDefault "")
         wishes =
             if loadedModel.wishlist.wishes |> List.isEmpty then
                 h4 [ Spacing.mt2 ] [ text "There are no wishes on this list"]
             else 
-                Html.ul [ class "list-group" ] ( loadedModel.wishlist.wishes |> List.map (viewWish isAuthTokenSet loadedModel.wishlist.id token) )
+                Html.ul [ class "list-group" ] ( loadedModel.wishlist.wishes |> List.map (viewWish isAuthTokenSet loadedModel.wishlist.id token model.now) )
         isAddButtonDisabled = loadedModel.newWishName |> String.isEmpty
         controls =
             if loadedModel.currentToken |> Maybe.isJust then
@@ -782,14 +773,17 @@ viewWishlistLoaded model loadedModel =
                         [ Button.button [ Button.primary, Button.attrs [ onClick (Copy "foo") ] ] [ text "Copy link to share" ] ]
             in
             div [ Spacing.mt2, Spacing.mb2 ] buttons
+            
+        asFullRowCol html =
+            Grid.row [] [ Grid.col [] [ html ] ]
     in
     div []
-    [ h1 [] [ text loadedModel.wishlist.name ]
-    , subTitle
-    , small [ class "text-muted" ] [ text formattedAge ]
-    , copyButtons
-    , controls
-    , wishes
+    [ h1 [ Spacing.mt2 ] [ text loadedModel.wishlist.name ] |> asFullRowCol
+    , subTitle |> asFullRowCol
+    , small [ class "text-muted" ] [ text formattedAge ] |> asFullRowCol
+    , copyButtons |> asFullRowCol
+    , controls |> asFullRowCol
+    , wishes |> asFullRowCol
     ]
     
 
@@ -803,3 +797,24 @@ viewErrorState (error, details) =
       , small [] [ text details ]
       ]
     ]
+
+createAgeText : String -> String -> String -> Time.Posix -> Time.Posix -> String
+createAgeText justNowText prefix suffix start end =
+    let
+        age =
+            Duration.from start end
+        ageInSeconds = age |> Duration.inSeconds
+        ageInMinutes = age |> Duration.inMinutes
+        ageInHours = age |> Duration.inHours
+        ageInDays = age |> Duration.inDays
+        ageInMonths = ageInDays / 30.437
+        ageInYears = age |> Duration.inJulianYears
+        formattedAge =
+            if ageInSeconds <= 10 then justNowText
+            else if ageInMinutes <= 1 then prefix ++ (ageInSeconds |> Round.floor 0) ++ " seconds" ++ suffix
+            else if ageInHours <= 1 then prefix ++ (ageInMinutes |> Round.floor 0) ++ " minutes" ++ suffix
+            else if ageInDays <= 1 then prefix ++ (ageInHours |> Round.floor 0) ++ " hours" ++ suffix
+            else if ageInMonths <= 1 then prefix ++ (ageInDays |> Round.floor 0) ++ " days" ++ suffix
+            else if ageInYears <= 1 then prefix ++ (ageInMonths |> Round.floor 0) ++ " months" ++ suffix
+            else prefix ++ (ageInYears |> Round.floor 0) ++ " years" ++ suffix
+    in formattedAge
