@@ -1,6 +1,8 @@
 module Main exposing (..)
 
 import Bootstrap.Button as Button
+import Bootstrap.Card as Card
+import Bootstrap.Card.Block as Block
 import Bootstrap.Form as Form
 import Bootstrap.Utilities.Flex as Flex
 import Bootstrap.Grid as Grid
@@ -9,12 +11,13 @@ import Bootstrap.Grid.Row as Row
 import Bootstrap.Form.Input as Input exposing (onInput)
 import Bootstrap.Text as Text
 
+import Bootstrap.Utilities.Spacing as Spacing
 import Browser
 import Dict
-import Html exposing (Html, button, div, h1, h4, small, text)
+import Html exposing (Html, button, div, h1, h3, h4, small, text)
 import Html.Attributes exposing (class, for, href, style)
 import Html.Events exposing (onClick)
-import Http
+import Http exposing (Error(..))
 import Iso8601
 import Json.Encode
 import Maybe.Extra as Maybe
@@ -29,7 +32,7 @@ import QS as QS
 import Url.Parser exposing (Parser, (</>), map, oneOf, s)
 import Json.Decode exposing (Decoder, at, bool, field, list, maybe, string)
 import Duration as Duration
-import Round exposing (floor)
+import Round 
 
 
 apiUrl : String
@@ -70,6 +73,7 @@ routeParser =
     oneOf
       [ map WelcomeRoute (s "wishlists")
       , map WishlistRoute (s "wishlists" </> uuidParser)
+      , map WelcomeRoute (Url.Parser.top)
       ]
 
 
@@ -97,8 +101,40 @@ tryFromQuery key url =
             Nothing
 
 
-requestWishlistFromApi : String -> Json.Encode.Value -> Cmd Msg
-requestWishlistFromApi url payload =
+httpErrorToString : Http.Error -> String
+httpErrorToString error =
+    case error of
+        BadUrl url ->
+            "The URL " ++ url ++ " was invalid"
+        Timeout ->
+            "Unable to reach the server, try again"
+        NetworkError ->
+            "Unable to reach the server, check your network connection"
+        BadStatus 500 ->
+            "The server had a problem, try again later"
+        BadStatus 400 ->
+            "Verify your information and try again"
+        BadStatus 403 ->
+            "You are not allowed to do this"
+        BadStatus i ->
+            "Unknown error, status code " ++ (i |> String.fromInt)
+        BadBody errorMessage ->
+            errorMessage
+
+
+requestWishlistFromApi : String -> UUID -> Cmd Msg
+requestWishlistFromApi url id =
+    Http.get
+      { url = url ++ "/wishlists/" ++ (id |> UUID.toString)
+      , expect = Http.expectJson (\r -> (MessageForLoadingWishlist (GotWishlistFromApi r))) wishlistDecoder
+      }
+      
+      
+{-| Sends the minimum amount of fields required to create a new wishlist on the backend side -}
+registerNewWishlistFromApi : String ->  NewWishlistRequest -> Cmd Msg
+registerNewWishlistFromApi url wishlist =
+    let payload = wishlist |> newWishlistEncoder
+    in
     Http.post
       { url = url
       , body = Http.jsonBody payload
@@ -106,10 +142,61 @@ requestWishlistFromApi url payload =
       }
       
       
-{-| Sends the minimum amount of fields required to create a new wishlist on the backend side -}
-registerNewWishlistFromApi : String ->  NewWishlistRequest -> Cmd Msg
-registerNewWishlistFromApi url wishlist =
-    requestWishlistFromApi url (wishlist |> newWishlistEncoder)
+deleteWishFromApi : UUID -> UUID -> String -> Cmd Msg
+deleteWishFromApi wishlistId wishId authToken =
+    let
+        wishlist = wishlistId |> UUID.toString
+        wish = wishId |> UUID.toString
+    in
+    Http.request
+        { method = "DELETE"
+        , headers = []
+        , body = Http.emptyBody
+        , url = apiUrl ++ "/wishlists/" ++ wishlist ++ "/" ++ wish ++ "?token=" ++ authToken
+        , expect = Http.expectJson (\r -> (MessageForWishlistLoaded (UpdatedWishlist r))) wishlistDecoder
+        , timeout = Nothing
+        , tracker = Nothing
+        }
+
+
+addWishToApi : UUID -> String -> NewWish -> Cmd Msg
+addWishToApi wishlistId authToken newWish =
+    let
+        wishlist = (wishlistId |> UUID.toString)
+        json = newWish |> newWishEncoder
+    in
+    Http.post
+    { url = apiUrl ++ "/wishlists/" ++ wishlist ++ "/addwish?token=" ++ authToken
+    , body = Http.jsonBody json
+    , expect = Http.expectJson (\r -> (MessageForWishlistLoaded (UpdatedWishlist r))) addWishToWishlistDecoder
+    }
+
+markWishAsCompleted : UUID -> UUID -> Cmd Msg      
+markWishAsCompleted =
+    markWishAs True
+    
+    
+markWishAsNotCompleted : UUID -> UUID -> Cmd Msg      
+markWishAsNotCompleted =
+    markWishAs False
+      
+      
+markWishAs : Bool -> UUID -> UUID -> Cmd Msg      
+markWishAs isCompleted wishlistId wishId =
+    let
+        wishlist = wishlistId |> UUID.toString
+        wish = wishId |> UUID.toString
+        state = if isCompleted then "complete" else "uncomplete"
+    in
+    Http.request
+      { method = "PATCH"
+      , headers = []
+      , body = Http.emptyBody
+      , url = apiUrl ++ "/wishlists/" ++ wishlist ++ "/" ++ wish ++ "/" ++ state
+      , expect = Http.expectJson (\r -> (MessageForWishlistLoaded (UpdatedWishlist r))) wishlistDecoder
+      , timeout = Nothing
+      , tracker = Nothing
+      }
       
       
 newWishlistEncoder : NewWishlistRequest -> Json.Encode.Value
@@ -126,6 +213,23 @@ newWishlistEncoder wishlist =
         ]
 
 
+newWishEncoder : NewWish -> Json.Encode.Value
+newWishEncoder newWish =
+    let
+        description =
+            if newWish.description |> String.isEmpty then Json.Encode.null
+            else newWish.description |> Json.Encode.string
+        urls =
+            if newWish.url |> String.isEmpty then Json.Encode.null
+            else [ newWish.url ] |> (Json.Encode.list Json.Encode.string)
+    in
+    Json.Encode.object
+        [ ("name", Json.Encode.string newWish.name)
+        , ("description", description)
+        , ("urls", urls)
+        ]
+    
+
 newWishlistDecoder : Decoder NewWishlist
 newWishlistDecoder =
     Json.Decode.map2 NewWishlist
@@ -141,6 +245,11 @@ wishlistDecoder =
         (maybe (field "description" Json.Decode.string))
         (field "wishes" wishesDecoder)
         (field "creationTime" Iso8601.decoder)
+        
+        
+addWishToWishlistDecoder : Decoder Wishlist
+addWishToWishlistDecoder =
+    field "wishlist" wishlistDecoder
         
 
 wishesDecoder : Decoder (List Wish)
@@ -163,9 +272,10 @@ wishDecoder =
 
 type PageState
     = NotFoundState
-    | LoadingWishlistState LoadWishlistModel
+    | LoadingWishlistState LoadingWishlistModel
     | WishlistLoadedState WishlistLoadedModel
     | WelcomeState WelcomeModel
+    | ErrorState (String, String)
     
 type Route
     = WishlistRoute UUID
@@ -179,6 +289,12 @@ type alias Wish =
     , urls: List String
     , isCompleted: Bool
     , creationTime: Time.Posix
+    }
+    
+type alias NewWish =
+    { name: String
+    , description: String
+    , url: String
     }
 
 type alias Wishlist =
@@ -207,9 +323,12 @@ type alias WelcomeModel =
 type alias WishlistLoadedModel =
     { wishlist: Wishlist
     , currentToken: Maybe String
+    , newWishName: String
+    , newWishDescription: String
+    , newWishUrl: String
     }
     
-type alias LoadWishlistModel =
+type alias LoadingWishlistModel =
     { wishlistId: UUID
     , currentToken: Maybe String
     }
@@ -231,17 +350,25 @@ init flags url key =
         token = tryFromQuery "token" url
         route =  (Url.Parser.parse routeParser url) |> Maybe.withDefault NotFoundRoute
         
-        state =
+        (state, command) =
             case route of
-                WishlistRoute id -> LoadingWishlistState { currentToken = token, wishlistId = id  }
+                WishlistRoute id -> (LoadingWishlistState { currentToken = token, wishlistId = id  }, Just (requestWishlistFromApi apiUrl id))
                 
-                WelcomeRoute -> WelcomeState { wishlistName = "", wishlistDescription = "" }
+                WelcomeRoute -> (WelcomeState { wishlistName = "", wishlistDescription = "" }, Nothing)
                 
-                NotFoundRoute -> NotFoundState
+                NotFoundRoute -> (NotFoundState, Nothing)
 
+        getTimeZoneCommand =
+            Task.perform GotTimezone Time.here
+
+        commands =
+            case command of
+                Just c -> [ getTimeZoneCommand, c ]
+                Nothing -> [ getTimeZoneCommand ]
+                    
         _ = Debug.log "state" state
     in
-    ( { state = state, zone = Time.utc, now = Time.millisToPosix 0, navKey = key } , Task.perform GotTimezone Time.here )
+    ( { state = state, zone = Time.utc, now = Time.millisToPosix 0, navKey = key } , Cmd.batch commands )
 
 
 -- UPDATE
@@ -251,6 +378,7 @@ type Msg
   | LinkClicked UrlRequest
   | MessageForWelcome WelcomeMsg
   | MessageForWishlistLoaded WishlistLoadedMsg
+  | MessageForLoadingWishlist LoadingWishlistMsg
   | GotTimezone Time.Zone
   | GotNow Time.Posix
 
@@ -263,8 +391,19 @@ type WelcomeMsg
   
   
 type WishlistLoadedMsg  
-  = GetTimeAndZone Time.Posix
+  = UpdatedWishlist (Result Http.Error Wishlist)
+  | DeleteWish UUID UUID String
+  | MarkWishAsCompleted UUID UUID
+  | MarkWishAsNotCompleted UUID UUID
+  | NewWishNameChanged String
+  | NewWishDescriptionChanged String
+  | NewWishUrlChanged String
+  | AddWish UUID String NewWish
   
+
+type LoadingWishlistMsg
+  = GotWishlistFromApi (Result Http.Error Wishlist)
+
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
@@ -303,6 +442,15 @@ update msg model =
                 in 
                 ( model, Cmd.none)
 
+    MessageForLoadingWishlist loadingWishlistMessage ->
+        case model.state of
+            LoadingWishlistState loadingModel ->
+                updateLoadingWishlist loadingWishlistMessage loadingModel model
+            _ ->
+                let _ = Debug.log "MessageForLoadingWishlist" "Received MessageForLoadingWishlist not in LoadingWishlistState"
+                in 
+                ( model, Cmd.none)
+
 
 updateWelcome : WelcomeMsg -> WelcomeModel -> Model -> (Model, Cmd Msg)
 updateWelcome msg welcomeModel model =
@@ -329,12 +477,19 @@ updateWelcome msg welcomeModel model =
                             , Nav.pushUrl model.navKey (newWishlist.wishlist.id |> UUID.toString)
                             ]
                     in
-                    ( { model | state = WishlistLoadedState { wishlist = newWishlist.wishlist, currentToken = Just newWishlist.token } }, Cmd.batch cmd )
+                    ( { model | state =
+                        WishlistLoadedState 
+                        { wishlist = newWishlist.wishlist
+                        , currentToken = Just newWishlist.token
+                        , newWishName = ""
+                        , newWishDescription = ""
+                        , newWishUrl = ""
+                        } }, Cmd.batch cmd )
                 Err e ->
                     let
                         _ = Debug.log "Retrieving the result of a create-new-wishlist-request is in error state" e
                     in
-                    ( model, Cmd.none )
+                    ( { model | state = ErrorState ("Could not register the new wish list", e |> httpErrorToString) }, Cmd.none )
 
         CreateNewWishlist ->
             let
@@ -347,8 +502,79 @@ updateWelcome msg welcomeModel model =
 
 
 updateWishlistLoaded : WishlistLoadedMsg -> WishlistLoadedModel -> Model -> (Model, Cmd Msg)
-updateWishlistLoaded msg loadedMsg model =
-    ( model, Cmd.none )
+updateWishlistLoaded msg loadedModel model =
+    case msg of
+        UpdatedWishlist retrievalResult ->
+            let
+                _ = Debug.log "UpdateWishlist" retrievalResult
+            in
+            case retrievalResult of
+                Ok wishlist ->
+                    let
+                        updatedLoadedModel =
+                            { loadedModel | wishlist = wishlist}
+                    in
+                    ( { model | state = WishlistLoadedState updatedLoadedModel }, Cmd.none )
+                Err e ->
+                    let
+                        _ = Debug.log "The server refused the request =(" e
+                    in
+                    ( { model | state = ErrorState ("The server refused to delete the wish", e |> httpErrorToString) }, Cmd.none )
+
+        DeleteWish wishlistId wishId authToken ->
+            ( model, deleteWishFromApi wishlistId wishId authToken )
+
+        MarkWishAsCompleted wishlistId wishId ->
+            ( model, markWishAsCompleted wishlistId wishId)
+
+        MarkWishAsNotCompleted wishlistId wishId ->
+            ( model, markWishAsNotCompleted wishlistId wishId)
+
+        NewWishNameChanged string ->
+            let
+                updatedLoadedModel = { loadedModel | newWishName = string }
+            in
+            ( { model | state = WishlistLoadedState updatedLoadedModel }, Cmd.none )
+
+        NewWishDescriptionChanged string ->
+            let
+                updatedLoadedModel = { loadedModel | newWishDescription = string }
+            in
+            ( { model | state = WishlistLoadedState updatedLoadedModel }, Cmd.none )
+            
+        NewWishUrlChanged string ->
+            let
+                updatedLoadedModel = { loadedModel | newWishUrl = string }
+            in
+            ( { model | state = WishlistLoadedState updatedLoadedModel }, Cmd.none )
+            
+        AddWish wishlistId token newWish ->
+            ( model, addWishToApi wishlistId token newWish )
+            
+            
+
+updateLoadingWishlist : LoadingWishlistMsg -> LoadingWishlistModel -> Model -> (Model, Cmd Msg)
+updateLoadingWishlist msg loadingModel model =
+    let
+        _ = Debug.log "updateLoadingWishlist" msg
+    in
+    case msg of
+        GotWishlistFromApi retrievalResult ->
+            case retrievalResult of
+                Ok wishlist ->
+                    ( { model | state =
+                        WishlistLoadedState
+                        { wishlist = wishlist
+                        , currentToken = loadingModel.currentToken 
+                        , newWishUrl = ""
+                        , newWishDescription = ""
+                        , newWishName = ""
+                        } }, Cmd.none )
+                Err e ->
+                    let
+                        _ = Debug.log "Retrieving the result of a create-new-wishlist-request is in error state" e
+                    in
+                    ( { model | state = ErrorState ("Could not load the wish list", e |> httpErrorToString) }, Cmd.none )
 
 
 -- VIEW
@@ -362,12 +588,14 @@ mainView model =
                 NotFoundState -> "Wishes - Url not found :("
                 LoadingWishlistState _ -> "Wishes - Please wait while we load your wishlist"
                 WishlistLoadedState loadedModel -> "Wishes - " ++ loadedModel.wishlist.name
+                ErrorState _ -> "Wishes - We ran into an error =("
         view =
             case model.state of
                 WelcomeState m -> viewWelcome m
                 NotFoundState -> viewNotFound
                 LoadingWishlistState m -> viewLoadingWishlist m
                 WishlistLoadedState m -> viewWishlistLoaded model m
+                ErrorState e -> viewErrorState e
     in
     { title = title
     , body =
@@ -412,7 +640,7 @@ viewNotFound =
     [ h1 [] [ text "404 - Page not found =("]
     ]
 
-viewLoadingWishlist : LoadWishlistModel -> Html Msg
+viewLoadingWishlist : LoadingWishlistModel -> Html Msg
 viewLoadingWishlist model =
     div [ Flex.block, Flex.justifyCenter, Flex.alignItemsCenter, style "height" "calc(100vh)" ]
     [ h1 [] [ text "We are loading your wishlist, please wait..."]
@@ -420,11 +648,50 @@ viewLoadingWishlist model =
 
 -- View if a wishlist has been loaded
 
-viewWish : Wish -> Html Msg
-viewWish wish =
-   Html.a [ href "#", class "list-group-item list-group-item-action flex-column align-items-start" ]
-   [
-   ] 
+viewWish : Bool -> UUID -> String -> Wish -> Html Msg
+viewWish showDeleteButton wishlistId authToken wish =
+    let
+        name =
+            if wish.isCompleted then Html.del [] [ text wish.name ]
+            else div [] [ text wish.name ]
+            
+        description =
+            case wish.description of
+                Just desc -> Html.p [] [ text desc ]
+                Nothing -> div [] []
+
+        urls =
+            case wish.urls of
+                [] -> 
+                    div [] [ text "There are no links" ]
+                links ->
+                    div [] (links |> List.map (\l -> Html.a [ href l ] [ text l ]))
+                    
+        completionButton =
+            let
+                (buttonText, buttonMsg) =
+                    if wish.isCompleted then
+                        ("Mark as not bought", MessageForWishlistLoaded (MarkWishAsNotCompleted wishlistId wish.id))
+                    else
+                        ("Mark as bought", MessageForWishlistLoaded (MarkWishAsCompleted wishlistId wish.id))
+            in
+            Button.button [ Button.primary, Button.small, Button.attrs [ Spacing.mr2, onClick buttonMsg ] ] [ text buttonText ] 
+
+        deletionButton =
+            if showDeleteButton then
+                Button.button [ Button.danger, Button.small, Button.attrs [ onClick (MessageForWishlistLoaded (DeleteWish wishlistId wish.id authToken)) ] ] [ text "Delete"]
+            else div [] []
+            
+        buttons =
+            div [] [ completionButton, deletionButton ]
+            
+    in
+    Html.li [ href "#", Spacing.mt2, class "list-group-item list-group-item-action flex-column align-items-start" ]
+    [ h4 [] [ name ]
+    , description
+    , urls
+    , buttons
+    ] 
 
 viewWishlistLoaded : Model -> WishlistLoadedModel -> Html Msg
 viewWishlistLoaded model loadedModel =
@@ -449,19 +716,63 @@ viewWishlistLoaded model loadedModel =
             else if ageInMonths <= 1 then "Created " ++ (ageInDays |> Round.floor 0) ++ " days ago"
             else if ageInYears <= 1 then "Created " ++ (ageInMonths |> Round.floor 0) ++ " months ago"
             else "Created " ++ (ageInYears |> Round.floor 0) ++ " years ago"
+        isAuthTokenSet = loadedModel.currentToken |> Maybe.isJust
+        token = (loadedModel.currentToken |> Maybe.withDefault "")
         wishes =
             if loadedModel.wishlist.wishes |> List.isEmpty then [ h4 [] [ text "There are no wishes on this list"] ]
-            else loadedModel.wishlist.wishes |> List.map viewWish
+            else loadedModel.wishlist.wishes |> List.map (viewWish isAuthTokenSet loadedModel.wishlist.id token)
         controls =
             if loadedModel.currentToken |> Maybe.isJust then
-                div [] []
+                Card.config [ Card.attrs [ ] ] 
+                |> Card.header [ class "text-center" ]
+                    [ h4 [ Spacing.mt2 ] [ text "Add new wish" ]
+                    ]
+                |> Card.block []
+                [
+                  Block.custom <|
+                      (Form.form []
+                        [ Form.group []
+                          [ Form.label [ for "newWishName" ] [ text "Wish" ]
+                          , Input.text [ Input.id "newWishName", onInput (\x -> MessageForWishlistLoaded (NewWishNameChanged x)) ]
+                          ]
+                        , Form.group []
+                          [ Form.label [ for "newWishDescription" ] [ text "Description (optional)" ]
+                          , Input.text [ Input.id "newWishDescription", onInput (\x -> MessageForWishlistLoaded (NewWishDescriptionChanged x)) ]
+                          ]
+                        , Form.group []
+                          [ Form.label [ for "newWishUrl" ] [ text "Link (optional)" ]
+                          , Input.url [ Input.id "newWishUrl", onInput (\x -> MessageForWishlistLoaded (NewWishUrlChanged x)) ]
+                          ]
+                        ])
+                , Block.custom <|
+                    (Button.button [ Button.primary, Button.attrs [ onClick (MessageForWishlistLoaded (AddWish loadedModel.wishlist.id token { name = loadedModel.newWishName, description = loadedModel.newWishDescription, url = loadedModel.newWishUrl } )) ] ] [ text "Add wish" ])
+                ]
+                |> Card.view
             else
-                div [] [ text "You cannot add or delete wishes from this wish list unless you have the matching admin token"]
+                Card.config []
+                |> Card.block [] [ Block.text [] [ text "You cannot add or delete wishes from this wish list unless you have the matching admin token" ] ]
+                |> Card.view
+                
+        _ = Debug.log "now" model.now
+        _ = Debug.log "creationDate" loadedModel.wishlist.creationTime
+        _ = Debug.log "age" age
     in
     div []
     [ h1 [] [ text loadedModel.wishlist.name ]
     , subTitle
     , small [ class "text-muted" ] [ text formattedAge ]
     , controls
-    , div [] wishes
+    , Html.ul [ class "list-group" ] wishes
+    ]
+    
+
+viewErrorState : (String, String) -> Html Msg
+viewErrorState (error, details) =
+    div [ Flex.block, Flex.justifyCenter, Flex.alignItemsCenter, style "height" "calc(100vh)" ]
+    [
+      div []
+      [ h1 [] [ text "Sorry, we encountered an error"]
+      , h4 [] [ text error ]
+      , small [] [ text details ]
+      ]
     ]

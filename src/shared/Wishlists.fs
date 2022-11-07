@@ -32,10 +32,11 @@ module Wishlists =
     let findWish wishId (list: Wishlist) =
         list.Wishes |> List.tryFind (fun wish -> wish.Id = wishId)
 
-    let updateWishIn (list: Wishlist) wish =
+    /// Updates a wish in the wish list. The order of the list is preserved
+    let updateWishIn (list: Wishlist) (wish: Wishes.Wish) =
         {
             list with
-                Wishes = wish :: (list.Wishes |> List.removeFirst (fun w -> w.Id = wish.Id))
+                Wishes = wish :: (list.Wishes |> List.removeFirst (fun w -> w.Id = wish.Id)) |> List.sortByDescending (fun w -> w.CreationTime)
         }
         
     let removeWishFrom wish (list: Wishlist) =

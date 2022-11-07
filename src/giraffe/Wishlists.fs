@@ -209,10 +209,10 @@ module Wishlists =
                     {
                         Wishes.Id = Guid.NewGuid()
                         Wishes.Description = validatedDesc
-                        Wishes.Title = validatedTitle
+                        Wishes.Name = validatedTitle
                         Wishes.Urls = validatedUrls
                         Wishes.IsCompleted = false
-                        Wishes.CreationTime = DateTime.Now
+                        Wishes.CreationTime = DateTimeOffset.Now
                     }
             }
             

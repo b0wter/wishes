@@ -5,7 +5,7 @@ open System
 module Wishes =
     type Wish = {
         Id: Guid
-        Title: string
+        Name: string
         Description: string option
         Urls: Uri list
         IsCompleted: bool
@@ -17,7 +17,7 @@ module Wishes =
         static member Create(title, ?description, ?url) =
             {
                 Id = Guid.NewGuid ()
-                Title = title
+                Name = title
                 Description = description
                 Urls =
                     url
@@ -27,3 +27,14 @@ module Wishes =
                 CreationTime = DateTimeOffset.UtcNow
             }
 
+        static member Create(title, ?description, ?urls : Uri list) =
+            {
+                Id = Guid.NewGuid ()
+                Name = title
+                Description = description
+                Urls =
+                    urls
+                    |> Option.defaultValue []
+                IsCompleted = false
+                CreationTime = DateTimeOffset.UtcNow
+            }
