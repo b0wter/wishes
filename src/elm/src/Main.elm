@@ -25,6 +25,7 @@ import Url exposing (Protocol(..), Url)
 import Browser exposing (UrlRequest)
 import Browser.Navigation as Nav exposing (Key)
 import QS as QS
+import Url.Builder
 import Url.Parser exposing (Parser, (</>), map, oneOf, s)
 import Json.Decode exposing (Decoder, bool, field, list, maybe, string)
 import Duration as Duration
@@ -341,6 +342,7 @@ type alias Model =
     , zone: Time.Zone
     , now: Time.Posix
     , navKey: Key
+    , baseUrl: String
     }
 
 type alias Flags =
@@ -368,10 +370,18 @@ init _ url key =
             case command of
                 Just c -> [ getTimeZoneCommand, c ]
                 Nothing -> [ getTimeZoneCommand ]
-                    
-        _ = Debug.log "state" state
+
+        baseUrl =
+            (case url.protocol of
+                Url.Http  -> "http://"
+                Url.Https -> "https://"
+            ) ++ url.host ++ 
+            (case url.port_ of
+                Just i -> ":" ++ (i |> String.fromInt)
+                Nothing -> ""
+            ) ++ "/"
     in
-    ( { state = state, zone = Time.utc, now = Time.millisToPosix 0, navKey = key } , Cmd.batch commands )
+    ( { state = state, zone = Time.utc, now = Time.millisToPosix 0, navKey = key, baseUrl = baseUrl } , Cmd.batch commands )
 
 
 -- UPDATE
@@ -771,10 +781,23 @@ viewWishlistLoaded model loadedModel =
                 |> Card.view
         
         copyButtons =
-            div [ Spacing.mt2, Spacing.mb2 ]
-            [ Button.button [ Button.primary, Button.attrs [ onClick (Copy "foo") ] ] [ text "Copy link to share" ]
-            , Button.button [ Button.primary, Button.attrs [ onClick (Copy "bar"), Spacing.ml2 ] ] [ text "Copy admin link" ]
-            ]
+            let
+                url =
+                    Url.Builder.absolute [ "foo", "bar", "?token=lel"]  []
+                _ = Debug.log "share url" url
+                buttons =
+                    let
+                        userUrl = model.baseUrl ++ "wishlists/" ++ (loadedModel.wishlist.id |> UUID.toString)
+                        adminUrl = userUrl ++ "?token=" ++ (loadedModel.currentToken |> Maybe.withDefault "")
+                    in
+                    if isAuthTokenSet then
+                        [ Button.button [ Button.primary, Button.attrs [ onClick (Copy userUrl) ] ] [ text "Copy link to share" ]
+                        , Button.button [ Button.primary, Button.attrs [ onClick (Copy adminUrl), Spacing.ml2 ] ] [ text "Copy admin link" ]
+                        ]
+                    else
+                        [ Button.button [ Button.primary, Button.attrs [ onClick (Copy "foo") ] ] [ text "Copy link to share" ] ]
+            in
+            div [ Spacing.mt2, Spacing.mb2 ] buttons
                 
         _ = Debug.log "now" model.now
         _ = Debug.log "creationDate" loadedModel.wishlist.creationTime
