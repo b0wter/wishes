@@ -6,22 +6,18 @@ import Bootstrap.Card.Block as Block
 import Bootstrap.Form as Form
 import Bootstrap.Utilities.Flex as Flex
 import Bootstrap.Grid as Grid
-import Bootstrap.Grid.Col as Col
-import Bootstrap.Grid.Row as Row
 import Bootstrap.Form.Input as Input exposing (onInput)
-import Bootstrap.Text as Text
 
 import Bootstrap.Utilities.Spacing as Spacing
 import Browser
 import Dict
-import Html exposing (Html, button, div, h1, h3, h4, small, text)
+import Html exposing (Html, div, h1, h4, small, text)
 import Html.Attributes exposing (class, disabled, for, href, style)
 import Html.Events exposing (onClick)
 import Http exposing (Error(..))
 import Iso8601
 import Json.Encode
 import Maybe.Extra as Maybe
-import Route exposing (Route)
 import Task
 import Time
 import UUID exposing (UUID)
@@ -30,7 +26,7 @@ import Browser exposing (UrlRequest)
 import Browser.Navigation as Nav exposing (Key)
 import QS as QS
 import Url.Parser exposing (Parser, (</>), map, oneOf, s)
-import Json.Decode exposing (Decoder, at, bool, field, list, maybe, string)
+import Json.Decode exposing (Decoder, bool, field, list, maybe, string)
 import Duration as Duration
 import Round 
 
@@ -345,7 +341,7 @@ type alias Flags =
 
 
 init : Flags -> Url -> Key -> ( Model, Cmd Msg )
-init flags url key =
+init _ url key =
     let
         token = tryFromQuery "token" url
         route = (Url.Parser.parse routeParser url) |> Maybe.withDefault NotFoundRoute
@@ -641,7 +637,7 @@ viewNotFound =
     ]
 
 viewLoadingWishlist : LoadingWishlistModel -> Html Msg
-viewLoadingWishlist model =
+viewLoadingWishlist _ =
     div [ Flex.block, Flex.justifyCenter, Flex.alignItemsCenter, style "height" "calc(100vh)" ]
     [ h1 [] [ text "We are loading your wishlist, please wait..."]
     ]
