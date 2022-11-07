@@ -28,6 +28,11 @@
     var app = Elm.Main.init({
       node: node
     });
+    app.ports.copy.subscribe(url => {
+      // Usually you'd check for permissions here but Firefox does not currently support that feature.
+      navigator.clipboard.writeText(url).then(() => app.ports.receiveCopyResult.send(true), () => app.ports.receiveCopyResult.send(false));
+    });
+
   </script>
 </body>
 

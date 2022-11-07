@@ -1,4 +1,4 @@
-module Main exposing (..)
+port module Main exposing (..)
 
 import Bootstrap.Button as Button
 import Bootstrap.Card as Card
@@ -31,6 +31,11 @@ import Duration as Duration
 import Round 
 
 
+port copy : String -> Cmd msg
+
+port receiveCopyResult : (Bool -> msg) -> Sub msg
+
+
 apiUrl : String
 apiUrl = "http://localhost:5000"
 
@@ -51,7 +56,9 @@ main =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    Sub.none
+    Sub.batch
+        [ receiveCopyResult CopyResult
+        ]
 
 
 -- MISC
@@ -377,6 +384,8 @@ type Msg
   | MessageForLoadingWishlist LoadingWishlistMsg
   | GotTimezone Time.Zone
   | GotNow Time.Posix
+  | Copy String
+  | CopyResult Bool
 
 
 type WelcomeMsg
@@ -447,6 +456,15 @@ update msg model =
                 in 
                 ( model, Cmd.none)
 
+    Copy string ->
+        ( model, copy string )   
+       
+    CopyResult result ->
+        let
+            _ = Debug.log "CopyResult" result
+        in
+        ( model, Cmd.none )   
+       
 
 updateWelcome : WelcomeMsg -> WelcomeModel -> Model -> (Model, Cmd Msg)
 updateWelcome msg welcomeModel model =
@@ -751,6 +769,12 @@ viewWishlistLoaded model loadedModel =
                 Card.config []
                 |> Card.block [] [ Block.text [] [ text "You cannot add or delete wishes from this wish list unless you have the matching admin token" ] ]
                 |> Card.view
+        
+        copyButtons =
+            div [ Spacing.mt2, Spacing.mb2 ]
+            [ Button.button [ Button.primary, Button.attrs [ onClick (Copy "foo") ] ] [ text "Copy link to share" ]
+            , Button.button [ Button.primary, Button.attrs [ onClick (Copy "bar"), Spacing.ml2 ] ] [ text "Copy admin link" ]
+            ]
                 
         _ = Debug.log "now" model.now
         _ = Debug.log "creationDate" loadedModel.wishlist.creationTime
@@ -760,6 +784,7 @@ viewWishlistLoaded model loadedModel =
     [ h1 [] [ text loadedModel.wishlist.name ]
     , subTitle
     , small [ class "text-muted" ] [ text formattedAge ]
+    , copyButtons
     , controls
     , wishes
     ]
