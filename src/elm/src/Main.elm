@@ -15,7 +15,7 @@ import Bootstrap.Utilities.Spacing as Spacing
 import Browser
 import Dict
 import Html exposing (Html, button, div, h1, h3, h4, small, text)
-import Html.Attributes exposing (class, for, href, style)
+import Html.Attributes exposing (class, disabled, for, href, style)
 import Html.Events exposing (onClick)
 import Http exposing (Error(..))
 import Iso8601
@@ -348,7 +348,7 @@ init : Flags -> Url -> Key -> ( Model, Cmd Msg )
 init flags url key =
     let
         token = tryFromQuery "token" url
-        route =  (Url.Parser.parse routeParser url) |> Maybe.withDefault NotFoundRoute
+        route = (Url.Parser.parse routeParser url) |> Maybe.withDefault NotFoundRoute
         
         (state, command) =
             case route of
@@ -474,7 +474,7 @@ updateWelcome msg welcomeModel model =
                     let
                         cmd =
                             [ Task.perform GotNow Time.now
-                            , Nav.pushUrl model.navKey (newWishlist.wishlist.id |> UUID.toString)
+                            , Nav.pushUrl model.navKey ("/wishlists/" ++ (newWishlist.wishlist.id |> UUID.toString) ++ "?token=" ++ newWishlist.token)
                             ]
                     in
                     ( { model | state =
@@ -519,7 +519,7 @@ updateWishlistLoaded msg loadedModel model =
                     let
                         _ = Debug.log "The server refused the request =(" e
                     in
-                    ( { model | state = ErrorState ("The server refused to delete the wish", e |> httpErrorToString) }, Cmd.none )
+                    ( { model | state = ErrorState ("The server refused the request =(", e |> httpErrorToString) }, Cmd.none )
 
         DeleteWish wishlistId wishId authToken ->
             ( model, deleteWishFromApi wishlistId wishId authToken )
@@ -719,13 +719,16 @@ viewWishlistLoaded model loadedModel =
         isAuthTokenSet = loadedModel.currentToken |> Maybe.isJust
         token = (loadedModel.currentToken |> Maybe.withDefault "")
         wishes =
-            if loadedModel.wishlist.wishes |> List.isEmpty then [ h4 [] [ text "There are no wishes on this list"] ]
-            else loadedModel.wishlist.wishes |> List.map (viewWish isAuthTokenSet loadedModel.wishlist.id token)
+            if loadedModel.wishlist.wishes |> List.isEmpty then
+                h4 [ Spacing.mt2 ] [ text "There are no wishes on this list"]
+            else 
+                Html.ul [ class "list-group" ] ( loadedModel.wishlist.wishes |> List.map (viewWish isAuthTokenSet loadedModel.wishlist.id token) )
+        isAddButtonDisabled = loadedModel.newWishName |> String.isEmpty
         controls =
             if loadedModel.currentToken |> Maybe.isJust then
-                Card.config [ Card.attrs [ ] ] 
+                Card.config [ Card.attrs [ Spacing.mt2 ] ] 
                 |> Card.header [ class "text-center" ]
-                    [ h4 [ Spacing.mt2 ] [ text "Add new wish" ]
+                    [ Html.h5 [ Spacing.mt2 ] [ text "Add new wish" ]
                     ]
                 |> Card.block []
                 [
@@ -745,7 +748,7 @@ viewWishlistLoaded model loadedModel =
                           ]
                         ])
                 , Block.custom <|
-                    (Button.button [ Button.primary, Button.attrs [ onClick (MessageForWishlistLoaded (AddWish loadedModel.wishlist.id token { name = loadedModel.newWishName, description = loadedModel.newWishDescription, url = loadedModel.newWishUrl } )) ] ] [ text "Add wish" ])
+                    (Button.button [ Button.primary, Button.attrs [ disabled isAddButtonDisabled, onClick (MessageForWishlistLoaded (AddWish loadedModel.wishlist.id token { name = loadedModel.newWishName, description = loadedModel.newWishDescription, url = loadedModel.newWishUrl } )) ] ] [ text "Add" ])
                 ]
                 |> Card.view
             else
@@ -762,7 +765,7 @@ viewWishlistLoaded model loadedModel =
     , subTitle
     , small [ class "text-muted" ] [ text formattedAge ]
     , controls
-    , Html.ul [ class "list-group" ] wishes
+    , wishes
     ]
     
 
