@@ -262,7 +262,7 @@ wishDecoder =
     Json.Decode.map6 Wish
         (field "id" UUID.jsonDecoder)
         (field "name" string)
-        (field "description" (maybe string))
+        (maybe (field "description" string))
         (field "urls" (list string))
         (field "isCompleted" bool)
         (field "creationTime" Iso8601.decoder)
