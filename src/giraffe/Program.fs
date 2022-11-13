@@ -28,6 +28,7 @@ let corsOrigins =
             "http://localhost:5000"
             "https://localhost:5001"
             "http://localhost:8081"
+            "https://wishes.plugman.de"
         |]
     else
         fromEnv.Split("%%")
@@ -105,7 +106,7 @@ let errorHandler (ex : Exception) (logger : ILogger) =
 
 let configureCors (builder : CorsPolicyBuilder) =
     builder
-       .WithOrigins(corsOrigins)
+       .AllowAnyOrigin()
        .AllowAnyMethod()
        .AllowAnyHeader()
        |> ignore
@@ -154,8 +155,8 @@ let configureServices (services : IServiceCollection) =
         
     services.AddCors(fun options ->
             options.AddPolicy( "_defaultCorsPolicy", fun policy ->
-                    do printfn "Adding cors for origins: %A" corsOrigins
-                    policy.AllowAnyHeader().AllowAnyMethod().WithOrigins(corsOrigins) |> ignore
+                    do printfn "Allowing CORS for all headers/methods/origins"
+                    policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin() |> ignore
                 )
         ) |> ignore
     services.AddGiraffe() |> ignore
