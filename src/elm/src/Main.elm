@@ -25,7 +25,6 @@ import Url exposing (Protocol(..), Url)
 import Browser exposing (UrlRequest)
 import Browser.Navigation as Nav exposing (Key)
 import QS as QS
-import Url.Builder
 import Url.Parser exposing (Parser, (</>), map, oneOf, s)
 import Json.Decode exposing (Decoder, bool, field, list, maybe, string)
 import Duration as Duration
@@ -38,7 +37,7 @@ port receiveCopyResult : (Bool -> msg) -> Sub msg
 
 
 apiUrl : String
-apiUrl = "http://localhost:5000"
+apiUrl = "https://wishes-api.plugman.de"
 
 
 -- MAIN
@@ -157,7 +156,7 @@ deleteWishFromApi wishlistId wishId authToken =
         , headers = []
         , body = Http.emptyBody
         , url = apiUrl ++ "/wishlists/" ++ wishlist ++ "/" ++ wish ++ "?token=" ++ authToken
-        , expect = Http.expectJson (\r -> (MessageForWishlistLoaded (UpdatedWishlist r))) wishlistDecoder
+        , expect = Http.expectJson (\r -> (MessageForWishlistLoaded (UpdatedWishlist (r, False)))) wishlistDecoder
         , timeout = Nothing
         , tracker = Nothing
         }
@@ -172,7 +171,7 @@ addWishToApi wishlistId authToken newWish =
     Http.post
     { url = apiUrl ++ "/wishlists/" ++ wishlist ++ "/addwish?token=" ++ authToken
     , body = Http.jsonBody json
-    , expect = Http.expectJson (\r -> (MessageForWishlistLoaded (UpdatedWishlist r))) addWishToWishlistDecoder
+    , expect = Http.expectJson (\r -> (MessageForWishlistLoaded (UpdatedWishlist (r, True)))) addWishToWishlistDecoder
     }
 
 markWishAsCompleted : UUID -> UUID -> Cmd Msg      
@@ -197,7 +196,7 @@ markWishAs isCompleted wishlistId wishId =
       , headers = []
       , body = Http.emptyBody
       , url = apiUrl ++ "/wishlists/" ++ wishlist ++ "/" ++ wish ++ "/" ++ state
-      , expect = Http.expectJson (\r -> (MessageForWishlistLoaded (UpdatedWishlist r))) wishlistDecoder
+      , expect = Http.expectJson (\r -> (MessageForWishlistLoaded (UpdatedWishlist (r, False)))) wishlistDecoder
       , timeout = Nothing
       , tracker = Nothing
       }
@@ -406,7 +405,7 @@ type WelcomeMsg
   
   
 type WishlistLoadedMsg  
-  = UpdatedWishlist (Result Http.Error Wishlist)
+  = UpdatedWishlist ((Result Http.Error Wishlist), Bool)
   | DeleteWish UUID UUID String
   | MarkWishAsCompleted UUID UUID
   | MarkWishAsNotCompleted UUID UUID
@@ -465,10 +464,7 @@ update msg model =
     Copy string ->
         ( model, copy string )   
        
-    CopyResult result ->
-        let
-            _ = Debug.log "CopyResult" result
-        in
+    CopyResult _ ->
         ( model, Cmd.none )   
        
 
@@ -504,7 +500,7 @@ updateWelcome msg welcomeModel model =
                         } }, Cmd.batch cmd )
                 Err e ->
                     let
-                        _ = Debug.log "Retrieving the result of a create-new-wishlist-request is in error state" e
+                       _ = Debug.log "Retrieving the result of a create-new-wishlist-request is in error state" e
                     in
                     ( { model | state = ErrorState ("Could not register the new wish list", e |> httpErrorToString) }, Cmd.none )
 
@@ -523,15 +519,23 @@ updateWishlistLoaded msg loadedModel model =
     case msg of
         UpdatedWishlist retrievalResult ->
             case retrievalResult of
-                Ok wishlist ->
+                (Ok wishlist, clearNewWishForm) ->
                     let
                         updatedLoadedModel =
-                            { loadedModel | wishlist = wishlist}
+                            if clearNewWishForm then
+                                { loadedModel |
+                                    wishlist = wishlist,
+                                    newWishName = "",
+                                    newWishUrl = "",
+                                    newWishDescription = ""
+                                }
+                            else
+                                { loadedModel | wishlist = wishlist }
                     in
                     ( { model | state = WishlistLoadedState updatedLoadedModel }, Cmd.none )
-                Err e ->
+                (Err e, _) ->
                     let
-                        _ = Debug.log "The server refused the request =(" e
+                       _ = Debug.log "The server refused the request =(" e
                     in
                     ( { model | state = ErrorState ("The server refused the request =(", e |> httpErrorToString) }, Cmd.none )
 
@@ -583,7 +587,7 @@ updateLoadingWishlist msg loadingModel model =
                         } }, Task.perform GotNow Time.now )
                 Err e ->
                     let
-                        _ = Debug.log "Retrieving the result of a create-new-wishlist-request is in error state" e
+                       _ = Debug.log "Retrieving the result of a create-new-wishlist-request is in error state" e
                     in
                     ( { model | state = ErrorState ("Could not load the wish list", e |> httpErrorToString) }, Cmd.none )
 
@@ -738,15 +742,15 @@ viewWishlistLoaded model loadedModel =
                       (Form.form []
                         [ Form.group []
                           [ Form.label [ for "newWishName" ] [ text "Wish" ]
-                          , Input.text [ Input.id "newWishName", onInput (\x -> MessageForWishlistLoaded (NewWishNameChanged x)) ]
+                          , Input.text [ Input.id "newWishName", Input.value loadedModel.newWishName, onInput (\x -> MessageForWishlistLoaded (NewWishNameChanged x)) ]
                           ]
                         , Form.group []
                           [ Form.label [ for "newWishDescription" ] [ text "Description (optional)" ]
-                          , Input.text [ Input.id "newWishDescription", onInput (\x -> MessageForWishlistLoaded (NewWishDescriptionChanged x)) ]
+                          , Input.text [ Input.id "newWishDescription", Input.value loadedModel.newWishDescription, onInput (\x -> MessageForWishlistLoaded (NewWishDescriptionChanged x)) ]
                           ]
                         , Form.group []
                           [ Form.label [ for "newWishUrl" ] [ text "Link (optional)" ]
-                          , Input.url [ Input.id "newWishUrl", onInput (\x -> MessageForWishlistLoaded (NewWishUrlChanged x)) ]
+                          , Input.url [ Input.id "newWishUrl", Input.value loadedModel.newWishUrl, onInput (\x -> MessageForWishlistLoaded (NewWishUrlChanged x)) ]
                           ]
                         ])
                 , Block.custom <|
