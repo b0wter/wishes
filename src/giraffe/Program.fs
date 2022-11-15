@@ -82,7 +82,8 @@ let webApp =
             ]
         PUT >=>
             choose [
-                routef "/wishlists/%O"              (fun id -> mustHaveToken id (defaultBindJsonAndTransformWithExtra Wishlists.UpdateWish.validateAndTransform Wishlists.UpdateWish.handler))
+                routef "/wishlists/%O"              (fun id -> mustHaveToken id (defaultBindJsonAndTransformWithExtra Wishlists.UpdateWishlist.validateAndTransform Wishlists.UpdateWishlist.handler))
+                routef "/wishlists/%O/%O"           (fun (listId, wishId) -> mustHaveToken listId (defaultBindJsonAndTransformWithExtra Wishlists.UpdateWish.validateAndTransform (Wishlists.UpdateWish.handler wishId)))
             ]
         POST >=>
             choose [

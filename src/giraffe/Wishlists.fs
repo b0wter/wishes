@@ -14,6 +14,7 @@ module Wishlists =
         dict [
             ("wishlist_1", "A wishlist with the given id does not exist")
             ("wishlist_2", "The given wish does not exist on the wishlist")
+            ("wishlist_3", "Could not update the wish because the wish ids from the route and body did not match")
         ]
         
     type RemoveWishlistTokenConverter() =
@@ -165,6 +166,48 @@ module Wishlists =
                     do repo.AddOrUpdate (wishlist.Id, wishlist) |> ignore
                     return! ctx.WriteJsonAsync {| token = wishlist.Token; wishlist = wishlist |}
                 } |> HttpUtilities.mapErrorToResponse ctx
+                
+    module UpdateWishlist =
+        type Payload = {
+            Name: string
+            Description: string option
+        }
+        
+        type WishlistUpdate = {
+            Name: string
+            Description: string option
+        }
+        
+        let validateAndTransform (payload: Payload) =
+            validation {
+                let! validName =
+                    payload.Name
+                    |> Validations.Name.isNotNullOrWhitespace
+                    |> Validation.bind Validations.Name.doesNotExceedMaxLength
+                and! validDescription =
+                    let validation =
+                        Validations.Description.isNotNullOrWhitespace
+                        >> Validation.bind Validations.Description.doesNotExceedMaxLength
+                        >> Validation.map Some
+                    payload.Description
+                    |> Option.map validation
+                    |> Option.defaultValue (Validation.ok None)
+                return
+                    {
+                        WishlistUpdate.Name = validName
+                        WishlistUpdate.Description = validDescription
+                    }
+            }
+        
+        let handler (update: WishlistUpdate) (oldWishlist: Wishlist) =
+            fun (_: HttpFunc) (ctx: HttpContext) ->
+                taskResult {
+                    let repo = ctx.GetService<WishlistRepo>()
+                    let updatedWishlist = { oldWishlist with Name = update.Name; Description = update.Description }
+                    do repo.AddOrUpdate (updatedWishlist.Id, updatedWishlist) |> ignore
+                    return! ctx.WriteJsonAsync updatedWishlist
+                } |> HttpUtilities.mapErrorToResponse ctx
+                
 
     module Delete =
         let handler (list: Wishlist) =
@@ -227,21 +270,20 @@ module Wishlists =
 
     module UpdateWish =
         type Payload = {
-            Id: string
             Name: string
             Description: string option
             Urls: string list option
+        }
+        
+        type WishUpdate = {
+            Name: string
+            Description: string option
+            Urls: Uri list
         }
 
         let validateAndTransform (payload: Payload) =
             validation {
                 let! validatedTitle = payload.Name |> Validations.Name.all
-                and! validatedId =
-                    if payload.Id |> String.IsNullOrWhiteSpace then Validation.error "The uuid must not be empty"
-                    else
-                        match payload.Id |> Guid.TryParse with
-                        | true, id -> Validation.ok id
-                        | false, _ -> Validation.error "The uuid cannot be parsed"
                 and! validatedDesc =
                     match payload.Description with
                     | Some desc ->
@@ -256,22 +298,26 @@ module Wishlists =
                     |> List.sequenceValidationA
                 return
                     {
-                        Wishes.Id = validatedId
-                        Wishes.Description = validatedDesc
-                        Wishes.Name = validatedTitle
-                        Wishes.Urls = validatedUrls
-                        Wishes.IsCompleted = false
-                        Wishes.CreationTime = DateTimeOffset.Now
+                        WishUpdate.Description = validatedDesc
+                        WishUpdate.Name = validatedTitle
+                        WishUpdate.Urls = validatedUrls
                     }
             }
         
-        let handler (updatedWish: Wishes.Wish) (wishlist: Wishlist) =
+        let handler (wishId: Guid) (update: WishUpdate) (wishlist: Wishlist) =
             fun (_: HttpFunc) (ctx: HttpContext) ->
                 taskResult {
-                    let repo = ctx.GetService<WishlistRepo>()
-                    let updatedList = updatedWish |> updateWishIn wishlist
-                    do repo.AddOrUpdate (wishlist.Id, updatedList) |> ignore
-                    return! ctx.WriteJsonAsync updatedList
+                    match wishlist.Wishes |> List.tryFind (fun w -> w.Id = wishId) with
+                    | Some wish ->
+                        let updatedWish = { wish with Name = update.Name; Description = update.Description; Urls = update.Urls }
+                        let repo = ctx.GetService<WishlistRepo>()
+                        let updatedList = updatedWish |> updateWishIn wishlist
+                        do repo.AddOrUpdate (wishlist.Id, updatedList) |> ignore
+                        return! ctx.WriteJsonAsync updatedList
+                    | None ->
+                        do ctx.SetStatusCode 404
+                        return! ctx.WriteJsonAsync {| Error = Errors["wishlist_2"]
+                                                      ErrorCode = "wishlist_2" |}
                 } |> HttpUtilities.mapErrorToResponse ctx
             
     module DeleteWish =
