@@ -225,6 +225,55 @@ module Wishlists =
                     return! ctx.WriteJsonAsync {| wishlist = updatedList; newWishId = wish.Id |}
                 } |> HttpUtilities.mapErrorToResponse ctx
 
+    module UpdateWish =
+        type Payload = {
+            Id: string
+            Name: string
+            Description: string option
+            Urls: string list option
+        }
+
+        let validateAndTransform (payload: Payload) =
+            validation {
+                let! validatedTitle = payload.Name |> Validations.Name.all
+                and! validatedId =
+                    if payload.Id |> String.IsNullOrWhiteSpace then Validation.error "The uuid must not be empty"
+                    else
+                        match payload.Id |> Guid.TryParse with
+                        | true, id -> Validation.ok id
+                        | false, _ -> Validation.error "The uuid cannot be parsed"
+                and! validatedDesc =
+                    match payload.Description with
+                    | Some desc ->
+                        desc
+                        |> Validations.Description.all
+                        |> Validation.map Some
+                    | None -> Validation.ok None
+                and! validatedUrls =
+                    payload.Urls
+                    |> Option.defaultValue []
+                    |> List.map Validations.Urls.isValid
+                    |> List.sequenceValidationA
+                return
+                    {
+                        Wishes.Id = validatedId
+                        Wishes.Description = validatedDesc
+                        Wishes.Name = validatedTitle
+                        Wishes.Urls = validatedUrls
+                        Wishes.IsCompleted = false
+                        Wishes.CreationTime = DateTimeOffset.Now
+                    }
+            }
+        
+        let handler (updatedWish: Wishes.Wish) (wishlist: Wishlist) =
+            fun (_: HttpFunc) (ctx: HttpContext) ->
+                taskResult {
+                    let repo = ctx.GetService<WishlistRepo>()
+                    let updatedList = updatedWish |> updateWishIn wishlist
+                    do repo.AddOrUpdate (wishlist.Id, updatedList) |> ignore
+                    return! ctx.WriteJsonAsync updatedList
+                } |> HttpUtilities.mapErrorToResponse ctx
+            
     module DeleteWish =
         let handler (wishId: Guid) (list: Wishlist) =
             fun (_: HttpFunc) (ctx: HttpContext) ->

@@ -80,6 +80,10 @@ let webApp =
                 routef "/wishlists/%O/%O/complete"  (fun idTuple -> Wishlists.MarkWishAs.Completed.handler idTuple)
                 routef "/wishlists/%O/%O/uncomplete"(fun idTuple -> Wishlists.MarkWishAs.NotCompleted.handler idTuple)
             ]
+        PUT >=>
+            choose [
+                routef "/wishlists/%O"              (fun id -> mustHaveToken id (defaultBindJsonAndTransformWithExtra Wishlists.UpdateWish.validateAndTransform Wishlists.UpdateWish.handler))
+            ]
         POST >=>
             choose [
                 route  "/wishlists"                 >=> defaultBindJsonAndValidate Wishlists.New.validateAndTransform Wishlists.New.handler
