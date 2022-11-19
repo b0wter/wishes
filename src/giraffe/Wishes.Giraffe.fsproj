@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="FSharp.SystemTextJson" Version="1.0.6" />
     <PackageReference Include="FsToolkit.ErrorHandling" Version="3.1.0" />
     <PackageReference Include="FsToolkit.ErrorHandling.TaskResult" Version="3.1.0" />
     <PackageReference Include="Giraffe" Version="6.0.0" />
@@ -18,7 +19,6 @@
   <ItemGroup>
     <Compile Include="Utilities.fs" />
     <Compile Include="Service.fs" />
-    <Compile Include="Json.fs" />
     <Compile Include="HttpUtilities.fs" />
     <Compile Include="Wishlists.fs" />
     <Compile Include="Program.fs" />

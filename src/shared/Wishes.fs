@@ -3,6 +3,27 @@ namespace Wishes.Shared
 open System
 
 module Wishes =
+    type Priority =
+        | Low
+        | Moderate
+        | High
+        | VeryHigh
+    
+    let tryParsePriority (s: string) =
+        match s.ToLower() with
+        | "low" -> Some Low
+        | "moderate" -> Some Moderate
+        | "high" -> Some High
+        | "veryhigh" -> Some VeryHigh
+        | _ -> None
+        
+    let priorityAsString p =
+        match p with
+        | Low -> "low"
+        | Moderate -> "moderate"
+        | High -> "high"
+        | VeryHigh -> "veryhigh"
+        
     type Wish = {
         Id: Guid
         Name: string
@@ -10,6 +31,7 @@ module Wishes =
         Urls: Uri list
         IsCompleted: bool
         CreationTime: DateTimeOffset
+        Priority: Priority option
     }
     
     [<AbstractClass; Sealed>]
@@ -25,6 +47,7 @@ module Wishes =
                     |> Option.defaultValue []
                 IsCompleted = false
                 CreationTime = DateTimeOffset.UtcNow
+                Priority = None
             }
 
         static member Create(title, ?description, ?urls : Uri list) =
@@ -37,4 +60,11 @@ module Wishes =
                     |> Option.defaultValue []
                 IsCompleted = false
                 CreationTime = DateTimeOffset.UtcNow
+                Priority = None
             }
+
+    type WishConverter() =
+        inherit System.Text.Json.Serialization.JsonConverter<Wish>()
+
+        override this.Read(reader, typeToConvert, options) = failwith "todo"
+        override this.Write(writer, value, options) = failwith "todo"

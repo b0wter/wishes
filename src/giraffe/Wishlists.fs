@@ -256,6 +256,7 @@ module Wishlists =
                         Wishes.Urls = validatedUrls
                         Wishes.IsCompleted = false
                         Wishes.CreationTime = DateTimeOffset.Now
+                        Wishes.Priority = None
                     }
             }
             
@@ -273,12 +274,14 @@ module Wishlists =
             Name: string
             Description: string option
             Urls: string list option
+            Priority: string option
         }
         
         type WishUpdate = {
             Name: string
             Description: string option
             Urls: Uri list
+            Priority: Wishes.Priority option
         }
 
         let validateAndTransform (payload: Payload) =
@@ -296,11 +299,19 @@ module Wishlists =
                     |> Option.defaultValue []
                     |> List.map Validations.Urls.isValid
                     |> List.sequenceValidationA
+                and! validatedPriority =
+                    match payload.Priority with
+                    | Some p ->
+                        match p |> Wishes.tryParsePriority with
+                        | Some parsed -> Validation.ok (Some parsed)
+                        | None -> Validation.error "The given priority could not be parsed"
+                    | None -> Validation.ok None
                 return
                     {
                         WishUpdate.Description = validatedDesc
                         WishUpdate.Name = validatedTitle
                         WishUpdate.Urls = validatedUrls
+                        WishUpdate.Priority = validatedPriority
                     }
             }
         
@@ -309,7 +320,7 @@ module Wishlists =
                 taskResult {
                     match wishlist.Wishes |> List.tryFind (fun w -> w.Id = wishId) with
                     | Some wish ->
-                        let updatedWish = { wish with Name = update.Name; Description = update.Description; Urls = update.Urls }
+                        let updatedWish = { wish with Name = update.Name; Description = update.Description; Urls = update.Urls; Priority = update.Priority }
                         let repo = ctx.GetService<WishlistRepo>()
                         let updatedList = updatedWish |> updateWishIn wishlist
                         do repo.AddOrUpdate (wishlist.Id, updatedList) |> ignore

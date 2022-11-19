@@ -1,6 +1,5 @@
 namespace Wishes.Repository
 
-open System
 open System.Collections.Concurrent
 open Microsoft.Extensions.Logging
 
@@ -8,14 +7,20 @@ module Repository =
     
     type private Dict<'key, 'value> = ConcurrentDictionary<'key, 'value>
     
-    type InMemory<'key, 'value> private (dict: Dict<'key, 'value>, filename: string, logger: ILogger<InMemory<'key, 'value>>) =
+    type InMemory<'key, 'value> private (dict: Dict<'key, 'value>, filename: string, logger: ILogger<InMemory<'key, 'value>>, customConverters: System.Text.Json.Serialization.JsonConverter list) =
         let mutable newChange = false
+        let options = System.Text.Json.JsonSerializerOptions()
+        do customConverters |> List.iter (fun c -> options.Converters.Add(c))
  
         let saveToFile filename =
             logger.LogInformation "Trying to save repository to file"
-            let serialized = dict |> System.Text.Json.JsonSerializer.Serialize
-            System.IO.File.WriteAllText(filename, serialized)
-            logger.LogInformation "Repository written to file"
+            try
+                let serialized = System.Text.Json.JsonSerializer.Serialize(dict, options)
+                System.IO.File.WriteAllText(filename, serialized)
+                logger.LogInformation "Repository written to file"
+            with
+            | exn ->
+                logger.LogCritical("Could not save repository to disk because", exn)
         
         member __.HasChangedSinceLastSave =
             newChange
@@ -65,12 +70,14 @@ module Repository =
             saveToFile filename
             newChange <- false
             
-        static member FromFile<'key, 'value> (filename, logger) : InMemory<'key, 'value> =
+        static member FromFile<'key, 'value> (filename, logger, customConverters) : InMemory<'key, 'value> =
+            let options = System.Text.Json.JsonSerializerOptions()
+            do customConverters |> List.iter (fun c -> options.Converters.Add(c))
             let lists =
                 filename
                 |> System.IO.File.ReadAllText
-                |> System.Text.Json.JsonSerializer.Deserialize<Dict<'key, 'value>>
-            InMemory(lists, filename, logger)
+                |> (fun s -> System.Text.Json.JsonSerializer.Deserialize<Dict<'key, 'value>>(s, options))
+            InMemory(lists, filename, logger, customConverters)
             
-        static member Empty<'key, 'value> (filename, logger) : InMemory<'key, 'value> =
-            InMemory(Dict<'key, 'value>(), filename, logger)
+        static member Empty<'key, 'value> (filename, logger, customConverters) : InMemory<'key, 'value> =
+            InMemory(Dict<'key, 'value>(), filename, logger, customConverters)

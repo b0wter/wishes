@@ -9,6 +9,11 @@
     <Compile Include="List.fs" />
     <Compile Include="Wishes.fs" />
     <Compile Include="Wishlists.fs" />
+    <Compile Include="Json.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Text.Json" Version="7.0.0" />
   </ItemGroup>
 
 </Project>

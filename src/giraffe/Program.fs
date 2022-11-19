@@ -141,23 +141,20 @@ let configureServices (services : IServiceCollection) =
     let addCustomJsonHandling (s: IServiceCollection) =
         let serializationOptions = SystemTextJson.Serializer.DefaultOptions
         serializationOptions.DefaultIgnoreCondition <- JsonIgnoreCondition.WhenWritingNull
-        serializationOptions.Converters.Add(Json.ListConverter())
-        serializationOptions.Converters.Add(Json.MapConverter())
-        serializationOptions.Converters.Add(Json.OptionConverter())
-        serializationOptions.Converters.Add(Json.ListValueConverter())
-        serializationOptions.Converters.Add(Json.MapValueConverter())
-        serializationOptions.Converters.Add(Json.OptionValueConverter())
         serializationOptions.Converters.Add(Wishlists.RemoveWishlistTokenConverter())
+        serializationOptions.Converters.Add(Json.PriorityOptionConverter())
+        serializationOptions.Converters.Add(Json.PriorityConverter())
+        serializationOptions.Converters.Add(JsonFSharpConverter())
         services.AddSingleton<Json.ISerializer>(SystemTextJson.Serializer(serializationOptions)) |> ignore
         s
-        
+
     let createRepository (s: IServiceProvider) =
         let logger = s.GetService<ILogger<Repository.InMemory<Guid, Wishlists.Wishlist>>>()
         if wishlistFile |> File.Exists then
-            Repository.InMemory.FromFile<Guid, Wishlists.Wishlist>(wishlistFile, logger)
+            Repository.InMemory.FromFile<Guid, Wishlists.Wishlist>(wishlistFile, logger, [ JsonFSharpConverter(); ])
         else
-            Repository.InMemory.Empty<Guid, Wishlists.Wishlist>(wishlistFile, logger)
-        
+            Repository.InMemory.Empty<Guid, Wishlists.Wishlist>(wishlistFile, logger, [ JsonFSharpConverter(); ])
+
     services.AddCors(fun options ->
             options.AddPolicy( "_defaultCorsPolicy", fun policy ->
                     do printfn "Allowing CORS for all headers/methods/origins"
