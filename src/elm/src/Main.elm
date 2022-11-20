@@ -4,6 +4,8 @@ import Bootstrap.Button as Button
 import Bootstrap.Card as Card
 import Bootstrap.Card.Block as Block
 import Bootstrap.Form as Form
+import Bootstrap.Form.Select as Select
+import Bootstrap.Modal as Modal
 import Bootstrap.Utilities.Flex as Flex
 import Bootstrap.Grid as Grid
 import Bootstrap.Form.Input as Input exposing (onInput)
@@ -29,6 +31,7 @@ import Url.Parser exposing (Parser, (</>), map, oneOf, s)
 import Json.Decode exposing (Decoder, bool, field, list, maybe, string)
 import Duration as Duration
 import Round 
+import List.Extra as List
 
 
 port copy : String -> Cmd msg
@@ -174,6 +177,25 @@ addWishToApi wishlistId authToken newWish =
     , expect = Http.expectJson (\r -> (MessageForWishlistLoaded (UpdatedWishlist (r, True)))) addWishToWishlistDecoder
     }
 
+
+updateWishInApi : UUID -> String -> Wish -> Cmd Msg
+updateWishInApi wishlistUuid authToken wish =
+    let
+        wishlistId = wishlistUuid |> UUID.toString
+        wishId = wish.id |> UUID.toString
+        json = wish |> wishEncoder
+    in
+    Http.request
+    { method = "PUT"
+    , headers = []
+    , url = apiUrl ++ "/wishlists/" ++ wishlistId ++ "/" ++ wishId ++ "?token=" ++ authToken
+    , body = Http.jsonBody json
+    , expect = Http.expectJson (\r -> (MessageForWishlistLoaded (UpdatedWishlist (r, True)))) wishlistDecoder
+    , timeout = Nothing
+    , tracker = Nothing
+    }
+
+
 markWishAsCompleted : UUID -> UUID -> Cmd Msg      
 markWishAsCompleted =
     markWishAs True
@@ -232,6 +254,30 @@ newWishEncoder newWish =
         , ("urls", urls)
         ]
     
+    
+wishEncoder : Wish -> Json.Encode.Value
+wishEncoder wish =
+    let
+        description =
+            case wish.description of
+                Just "" -> Json.Encode.null
+                Nothing -> Json.Encode.null
+                Just d -> Json.Encode.string d
+        priority =
+            case wish.priority of
+                Just Low -> Json.Encode.string "low"
+                Just Moderate -> Json.Encode.string "moderate"
+                Just High -> Json.Encode.string "high"
+                Just VeryHigh -> Json.Encode.string "veryhigh"
+                Nothing -> Json.Encode.null
+    in
+    Json.Encode.object
+        [ ("name", Json.Encode.string wish.name)
+        , ("description", description)
+        , ("priority", priority)
+        , ("urls", Json.Encode.list Json.Encode.string wish.urls)
+        ]
+    
 
 newWishlistDecoder : Decoder NewWishlist
 newWishlistDecoder =
@@ -258,18 +304,31 @@ addWishToWishlistDecoder =
 wishesDecoder : Decoder (List Wish)
 wishesDecoder =
     list wishDecoder
-    
 
+
+priorityDecoder : Decoder Priority
+priorityDecoder =
+    Json.Decode.string
+        |> Json.Decode.andThen (\str -> 
+            case str of
+                "low" -> Json.Decode.succeed  Low
+                "moderate" -> Json.Decode.succeed Moderate
+                "high" -> Json.Decode.succeed High
+                "veryhigh" -> Json.Decode.succeed VeryHigh
+                _ -> Json.Decode.fail "unknown priority"
+        )
+
+    
 wishDecoder : Decoder Wish
 wishDecoder =
-    Json.Decode.map6 Wish
+    Json.Decode.map7 Wish
         (field "id" UUID.jsonDecoder)
         (field "name" string)
         (maybe (field "description" string))
         (field "urls" (list string))
         (field "isCompleted" bool)
         (field "creationTime" Iso8601.decoder)
-
+        (maybe (field "priority" priorityDecoder))
 
 -- MODEL
 
@@ -284,6 +343,12 @@ type Route
     = WishlistRoute UUID
     | WelcomeRoute
     | NotFoundRoute
+    
+type Priority
+    = Low
+    | Moderate
+    | High
+    | VeryHigh
 
 type alias Wish =
     { id: UUID
@@ -292,6 +357,7 @@ type alias Wish =
     , urls: List String
     , isCompleted: Bool
     , creationTime: Time.Posix
+    , priority: Maybe Priority
     }
     
 type alias NewWish =
@@ -323,12 +389,27 @@ type alias WelcomeModel =
     , wishlistDescription: String
     }
 
+type alias EditWishModalModel =
+    { wish: Wish
+    , visibility: Modal.Visibility
+    , isInSavingState: Bool
+    }
+    {-
+    { wishId: UUID
+    , name: String
+    , description: String
+    , priority: Maybe Priority
+    , visibility: Modal.Visibility
+    }
+    -}
+
 type alias WishlistLoadedModel =
     { wishlist: Wishlist
     , currentToken: Maybe String
     , newWishName: String
     , newWishDescription: String
     , newWishUrl: String
+    , editWishModal: Maybe EditWishModalModel
     }
     
 type alias LoadingWishlistModel =
@@ -407,6 +488,12 @@ type WelcomeMsg
 type WishlistLoadedMsg  
   = UpdatedWishlist ((Result Http.Error Wishlist), Bool)
   | DeleteWish UUID UUID String
+  | ShowEditWishModal Wish
+  | CloseEditWishModal
+  | EditWishName String
+  | EditWishDescription String
+  | EditWishPriority String
+  | SaveUpdatedWish
   | MarkWishAsCompleted UUID UUID
   | MarkWishAsNotCompleted UUID UUID
   | NewWishNameChanged String
@@ -497,6 +584,7 @@ updateWelcome msg welcomeModel model =
                         , newWishName = ""
                         , newWishDescription = ""
                         , newWishUrl = ""
+                        , editWishModal = Nothing
                         } }, Cmd.batch cmd )
                 Err e ->
                     let
@@ -527,7 +615,8 @@ updateWishlistLoaded msg loadedModel model =
                                     wishlist = wishlist,
                                     newWishName = "",
                                     newWishUrl = "",
-                                    newWishDescription = ""
+                                    newWishDescription = "",
+                                    editWishModal = Nothing
                                 }
                             else
                                 { loadedModel | wishlist = wishlist }
@@ -542,6 +631,103 @@ updateWishlistLoaded msg loadedModel model =
         DeleteWish wishlistId wishId authToken ->
             ( model, deleteWishFromApi wishlistId wishId authToken )
 
+        ShowEditWishModal wish ->
+            let
+                editWish =
+                    { id = wish.id
+                    , name = wish.name
+                    , description = wish.description
+                    , priority = wish.priority
+                    , urls = wish.urls
+                    , isCompleted = wish.isCompleted
+                    , creationTime = wish.creationTime
+                    }
+                editModalModel =
+                    { wish = editWish
+                    , visibility = Modal.shown
+                    , isInSavingState = False
+                    }
+                updatedLoadedModel = { loadedModel | editWishModal = Just editModalModel }
+            in
+            ( { model | state = WishlistLoadedState updatedLoadedModel }, Cmd.none )
+            
+        SaveUpdatedWish ->
+            let
+                (newModel, cmd) =
+                    case loadedModel.editWishModal of
+                        Just modal ->
+                            (model, updateWishInApi loadedModel.wishlist.id (loadedModel.currentToken |> Maybe.withDefault "") modal.wish)
+                        Nothing ->
+                            ({ model | state = ErrorState ("Could not update wish", "The application state was corrupted :(") }, Cmd.none)
+            in
+            --let
+            --    wishUuid = loadedModel.editWishModal.wishId |> Maybe.withDefault UUID.dnsNamespace
+            --    updatedWish =
+            --        loadedModel.wishlist.wishes |> List.find (\w -> w.id == loadedModel.editWishModal.wishId)
+            -- ( model, updateWishInApi )
+            ( newModel, cmd)
+            
+        CloseEditWishModal ->
+            let
+                updatedLoadedModel = { loadedModel | editWishModal = Nothing }
+            in
+            ( { model | state = WishlistLoadedState updatedLoadedModel }, Cmd.none )
+            
+        EditWishName newName ->
+            let
+                state =
+                    case loadedModel.editWishModal of
+                        Just modal ->
+                            let
+                                wish = modal.wish
+                                updatedWish = { wish | name = newName }
+                                updatedEditModal = { modal | wish = updatedWish }
+                            in
+                            WishlistLoadedState { loadedModel | editWishModal = Just updatedEditModal }
+                        Nothing ->
+                            ErrorState ("Could not update wish", "The application state was corrupted :(")
+            in
+            ( { model | state = state }, Cmd.none )
+
+        EditWishDescription newDescription ->
+            let
+                state =
+                    case loadedModel.editWishModal of
+                        Just modal ->
+                            let
+                                wish = modal.wish
+                                updatedWish = { wish | description = if newDescription |> String.isEmpty then Nothing else Just newDescription }
+                                updatedEditModal = { modal | wish = updatedWish }
+                            in
+                            WishlistLoadedState { loadedModel | editWishModal = Just updatedEditModal }
+                        Nothing ->
+                            ErrorState ("Could not update wish", "The application state was corrupted :(")
+            in
+            ( { model | state = state }, Cmd.none )
+            
+        EditWishPriority rawPriority ->
+            let
+                newPriority =
+                    case rawPriority |> String.toLower of
+                        "low" -> Just Low
+                        "moderate" -> Just Moderate
+                        "high" -> Just High
+                        "veryhigh" -> Just VeryHigh
+                        _ -> Nothing
+                state =
+                    case loadedModel.editWishModal of
+                        Just modal ->
+                            let
+                                wish = modal.wish
+                                updatedWish = { wish | priority = newPriority }
+                                updatedEditModal = { modal | wish = updatedWish }
+                            in
+                            WishlistLoadedState { loadedModel | editWishModal = Just updatedEditModal }
+                        Nothing ->
+                            ErrorState ("Could not update wish", "The application state was corrupted :(")
+            in
+            ( { model | state = state }, Cmd.none )
+            
         MarkWishAsCompleted wishlistId wishId ->
             ( model, markWishAsCompleted wishlistId wishId)
 
@@ -570,7 +756,6 @@ updateWishlistLoaded msg loadedModel model =
             ( model, addWishToApi wishlistId token newWish )
             
             
-
 updateLoadingWishlist : LoadingWishlistMsg -> LoadingWishlistModel -> Model -> (Model, Cmd Msg)
 updateLoadingWishlist msg loadingModel model =
     case msg of
@@ -584,6 +769,7 @@ updateLoadingWishlist msg loadingModel model =
                         , newWishUrl = ""
                         , newWishDescription = ""
                         , newWishName = ""
+                        , editWishModal = Nothing
                         } }, Task.perform GotNow Time.now )
                 Err e ->
                     let
@@ -620,6 +806,7 @@ mainView model =
         ]
     }
     
+    
 viewWelcome : WelcomeModel -> Html Msg
 viewWelcome model =
     let
@@ -655,6 +842,7 @@ viewNotFound =
     [ h1 [] [ text "404 - Page not found =("]
     ]
 
+
 viewLoadingWishlist : LoadingWishlistModel -> Html Msg
 viewLoadingWishlist _ =
     div [ Flex.block, Flex.justifyCenter, Flex.alignItemsCenter, style "height" "calc(100vh)" ]
@@ -662,57 +850,6 @@ viewLoadingWishlist _ =
     ]
 
 -- View if a wishlist has been loaded
-
-viewWish : Bool -> UUID -> String -> Time.Posix -> Wish -> Html Msg
-viewWish showDeleteButton wishlistId authToken now wish =
-    let
-        title =
-            if wish.isCompleted then
-                Block.titleH5 [] [ Html.del [] [ text wish.name ] ]
-            else
-                Block.titleH5 [] [ text wish.name ]
-
-        description =
-            wish.description
-            |> Maybe.map (\t -> Block.text [] [ text t ])
-                
-        links =
-            wish.urls |> List.indexedMap (\i u -> Just (Block.link [ href u ] [ text ("Example " ++ ((i + 1) |> String.fromInt))]))
-
-        blocks =
-            [ Just title
-            , description
-            ]
-            
-        completionButton =
-            let
-                (buttonText, buttonMsg) =
-                    if wish.isCompleted then
-                        ("Mark as not bought", MessageForWishlistLoaded (MarkWishAsNotCompleted wishlistId wish.id))
-                    else
-                        ("Mark as bought", MessageForWishlistLoaded (MarkWishAsCompleted wishlistId wish.id))
-            in
-            Just (Button.button [ Button.primary, Button.small, Button.attrs [ Spacing.mr2, onClick buttonMsg ] ] [ text buttonText ])
-
-        deletionButton =
-            if showDeleteButton then
-                Just (Button.button [ Button.danger, Button.small, Button.attrs [ onClick (MessageForWishlistLoaded (DeleteWish wishlistId wish.id authToken)) ] ] [ text "Delete"])
-            else Nothing
-            
-        buttons =
-            Just (Block.custom <| div [ Spacing.mt2 ] ([ completionButton, deletionButton ] |> Maybe.values))
-            
-        all = (List.append (List.append blocks links) [ buttons ]) |> Maybe.values
-        
-        age = createAgeText "Added just now! 😱" "Added " " ago" wish.creationTime now
-        
-        mutedClass = if wish.isCompleted then "text-muted" else ""
-    in
-    Card.config [ Card.attrs [ class mutedClass, Spacing.mt2 ] ]
-        |> Card.block [] all
-        |> Card.footer [] [ small [] [ text age ] ]
-        |> Card.view
-
 
 viewWishlistLoaded : Model -> WishlistLoadedModel -> Html Msg
 viewWishlistLoaded model loadedModel =
@@ -732,9 +869,9 @@ viewWishlistLoaded model loadedModel =
         isAddButtonDisabled = loadedModel.newWishName |> String.isEmpty
         controls =
             if loadedModel.currentToken |> Maybe.isJust then
-                Card.config [ Card.attrs [ Spacing.mt2 ] ] 
+                Card.config [ Card.attrs [ Spacing.mt2, Spacing.mb2 ] ] 
                 |> Card.header [ class "text-center" ]
-                    [ Html.h5 [ Spacing.mt2 ] [ text "Add new wish" ]
+                    [ Html.h5 [ Spacing.m0 ] [ text "Add new wish" ]
                     ]
                 |> Card.block []
                 [
@@ -778,18 +915,142 @@ viewWishlistLoaded model loadedModel =
             in
             div [ Spacing.mt2, Spacing.mb2 ] buttons
             
+        shortCut =
+            let
+                buttons =
+                    if isAuthTokenSet then
+                        [ Button.button [ Button.outlineDark, Button.attrs [ onClick (Copy (loadedModel.wishlist.id |> UUID.toString)) ] ] [ text "Copy id"]
+                        , Button.button [ Button.outlineDark, Button.attrs [ onClick (Copy (loadedModel.currentToken |> Maybe.withDefault "")), Spacing.ml2 ] ] [ text "Copy token"]
+                        , Button.linkButton [ Button.outlineDark, Button.attrs [ href "https://www.icloud.com/shortcuts/090566f0339f4b61a3add7fd7e2c2c7e", Spacing.ml2, Spacing.p0 ] ] [ Html.img [ Html.Attributes.width 35, Html.Attributes.src "/shortcut.png" ] [] ]
+                        ]
+                    else []
+            in
+            div [ ] buttons
+            
         asFullRowCol html =
             Grid.row [] [ Grid.col [] [ html ] ]
+            
+        modal =
+            case loadedModel.editWishModal of
+                Just editWishModal ->
+                    div [] [ viewEditWishModal Modal.shown editWishModal ]
+                Nothing ->
+                    div [] []
     in
     div []
     [ h1 [ Spacing.mt2 ] [ text loadedModel.wishlist.name ] |> asFullRowCol
+    , modal
     , subTitle |> asFullRowCol
     , small [ class "text-muted" ] [ text formattedAge ] |> asFullRowCol
     , copyButtons |> asFullRowCol
+    -- , shortCut |> asFullRowCol
     , controls |> asFullRowCol
     , wishes |> asFullRowCol
     ]
-    
+
+
+viewWish : Bool -> UUID -> String -> Time.Posix -> Wish -> Html Msg
+viewWish showDeleteButton wishlistId authToken now wish =
+    let
+        priority =
+            case wish.priority of
+                Just p ->
+                    case p of
+                        Low -> "(not that important)"
+                        Moderate -> "(nice to have)"
+                        High -> "(want it)"
+                        VeryHigh -> "(strongly want it)"
+                Nothing -> ""
+        title =
+            if wish.isCompleted then
+                Block.custom (div [ Flex.block, Flex.alignItemsBaseline ] [ Html.h5 [] [ Html.del [] [ text wish.name ] ], Html.small [ Spacing.ml2 ] [ text priority ] ])
+            else
+                Block.custom (div [ Flex.block, Flex.alignItemsBaseline ] [ Html.h5 [] [ text wish.name ], Html.small [ Spacing.ml2 ] [ text priority ] ])
+
+        description =
+            wish.description
+            |> Maybe.map (\t -> Block.text [] [ text t ])
+                
+        links =
+            wish.urls |> List.indexedMap (\i u -> Just (Block.link [ href u ] [ text ("Example " ++ ((i + 1) |> String.fromInt))]))
+
+        blocks =
+            [ Just title
+            , description
+            ]
+            
+        completionButton =
+            let
+                (buttonText, buttonMsg) =
+                    if wish.isCompleted then
+                        ("Mark as not bought", MessageForWishlistLoaded (MarkWishAsNotCompleted wishlistId wish.id))
+                    else
+                        ("Mark as bought", MessageForWishlistLoaded (MarkWishAsCompleted wishlistId wish.id))
+            in
+            Just (Button.button [ Button.primary, Button.small, Button.attrs [ Spacing.mr2, onClick buttonMsg ] ] [ text buttonText ])
+
+        deletionButton =
+            if showDeleteButton then
+                Just (Button.button [ Button.danger, Button.small, Button.attrs [ onClick (MessageForWishlistLoaded (DeleteWish wishlistId wish.id authToken)) ] ] [ text "Delete"])
+            else Nothing
+            
+        editButton =
+            if showDeleteButton then
+                Just (Button.button [ Button.primary, Button.small, Button.attrs [ Spacing.mr2, onClick (MessageForWishlistLoaded (ShowEditWishModal wish)) ] ] [ text "Edit"])
+            else Nothing
+            
+        buttons =
+            Just (Block.custom <| div [ Spacing.mt2 ] ([ completionButton, editButton, deletionButton ] |> Maybe.values))
+            
+        all = (List.append (List.append blocks links) [ buttons ]) |> Maybe.values
+        
+        age = createAgeText "Added just now! 😱" "Added " " ago" wish.creationTime now
+        
+        mutedClass = if wish.isCompleted then "text-muted" else ""
+    in
+    Card.config [ Card.attrs [ class mutedClass, Spacing.mb2 ] ]
+        |> Card.block [] all
+        |> Card.footer [] [ small [] [ text age ] ]
+        |> Card.view
+
+
+viewEditWishModal : Modal.Visibility -> EditWishModalModel -> Html Msg
+viewEditWishModal visibility editModel =
+    let
+        createSelect selectPriority selectValue selectName =
+            Select.item [ Html.Attributes.value selectValue, Html.Attributes.selected (selectPriority == editModel.wish.priority) ] [ text selectName ] 
+            
+        name = Input.text [ Input.id "editWishName", editModel.wish.name |> Input.value, Input.attrs [ Spacing.mb2 ] , onInput (\s -> MessageForWishlistLoaded (EditWishName s)) ]
+        description = Input.text [ Input.id "editWishDescription", (editModel.wish.description |> Maybe.withDefault "") |> Input.value, Input.attrs [ Spacing.mb2 ], onInput (\s -> MessageForWishlistLoaded (EditWishDescription s)) ]
+        priority = Select.select [ Select.id "editWishPriority", Select.onChange (\p -> MessageForWishlistLoaded (EditWishPriority p)) ]
+                    [ createSelect Nothing "none" "None"
+                    , createSelect (Just Low) "low" "not that important"
+                    , createSelect (Just Moderate) "moderate" "nice to have"
+                    , createSelect (Just High) "high" "want it"
+                    , createSelect (Just VeryHigh) "veryhigh" "strongly want it"
+                    ]
+    in
+    Modal.config (MessageForWishlistLoaded CloseEditWishModal)
+        |> Modal.large
+        |> Modal.hideOnBackdropClick True
+        |> Modal.h3 [] [ text "Edit wish" ]
+        |> Modal.body [] [ name, description, priority ]
+        |> Modal.footer []
+            [ Button.button
+                [ Button.outlineDanger
+                , Button.attrs [ onClick (MessageForWishlistLoaded CloseEditWishModal) ]
+                ]
+                [ text "Cancel"
+                ]
+            , Button.button
+                [ Button.outlinePrimary
+                , Button.attrs [ onClick (MessageForWishlistLoaded SaveUpdatedWish) ]
+                ]
+                [ text "Save"
+                ]
+            ]
+        |> Modal.view visibility
+
 
 viewErrorState : (String, String) -> Html Msg
 viewErrorState (error, details) =
@@ -801,6 +1062,7 @@ viewErrorState (error, details) =
       , small [] [ text details ]
       ]
     ]
+
 
 createAgeText : String -> String -> String -> Time.Posix -> Time.Posix -> String
 createAgeText justNowText prefix suffix start end =
