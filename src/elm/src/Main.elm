@@ -394,14 +394,6 @@ type alias EditWishModalModel =
     , visibility: Modal.Visibility
     , isInSavingState: Bool
     }
-    {-
-    { wishId: UUID
-    , name: String
-    , description: String
-    , priority: Maybe Priority
-    , visibility: Modal.Visibility
-    }
-    -}
 
 type alias WishlistLoadedModel =
     { wishlist: Wishlist
@@ -493,6 +485,7 @@ type WishlistLoadedMsg
   | EditWishName String
   | EditWishDescription String
   | EditWishPriority String
+  | EditWishUrl String
   | SaveUpdatedWish
   | MarkWishAsCompleted UUID UUID
   | MarkWishAsNotCompleted UUID UUID
@@ -590,7 +583,7 @@ updateWelcome msg welcomeModel model =
                     let
                        _ = Debug.log "Retrieving the result of a create-new-wishlist-request is in error state" e
                     in
-                    ( { model | state = ErrorState ("Could not register the new wish list", e |> httpErrorToString) }, Cmd.none )
+                    ( { model | state = ErrorState ("Wunschliste konnte nicht angelegt werden", e |> httpErrorToString) }, Cmd.none )
 
         CreateNewWishlist ->
             let
@@ -624,9 +617,9 @@ updateWishlistLoaded msg loadedModel model =
                     ( { model | state = WishlistLoadedState updatedLoadedModel }, Cmd.none )
                 (Err e, _) ->
                     let
-                       _ = Debug.log "The server refused the request =(" e
+                       _ = Debug.log "The server refused the request" e
                     in
-                    ( { model | state = ErrorState ("The server refused the request =(", e |> httpErrorToString) }, Cmd.none )
+                    ( { model | state = ErrorState ("Der Server hat die Anfrage abgelehnt =(", e |> httpErrorToString) }, Cmd.none )
 
         DeleteWish wishlistId wishId authToken ->
             ( model, deleteWishFromApi wishlistId wishId authToken )
@@ -658,13 +651,8 @@ updateWishlistLoaded msg loadedModel model =
                         Just modal ->
                             (model, updateWishInApi loadedModel.wishlist.id (loadedModel.currentToken |> Maybe.withDefault "") modal.wish)
                         Nothing ->
-                            ({ model | state = ErrorState ("Could not update wish", "The application state was corrupted :(") }, Cmd.none)
+                            ({ model | state = ErrorState ("Wunsch konnte nicht aktualisiert werden", "Der Anwendungsstatus ist korrupt =(") }, Cmd.none)
             in
-            --let
-            --    wishUuid = loadedModel.editWishModal.wishId |> Maybe.withDefault UUID.dnsNamespace
-            --    updatedWish =
-            --        loadedModel.wishlist.wishes |> List.find (\w -> w.id == loadedModel.editWishModal.wishId)
-            -- ( model, updateWishInApi )
             ( newModel, cmd)
             
         CloseEditWishModal ->
@@ -685,7 +673,7 @@ updateWishlistLoaded msg loadedModel model =
                             in
                             WishlistLoadedState { loadedModel | editWishModal = Just updatedEditModal }
                         Nothing ->
-                            ErrorState ("Could not update wish", "The application state was corrupted :(")
+                            ErrorState ("Wunsch konnte nicht aktualisiert werden", "Der Anwendungsstatus ist korrupt =(")
             in
             ( { model | state = state }, Cmd.none )
 
@@ -701,7 +689,23 @@ updateWishlistLoaded msg loadedModel model =
                             in
                             WishlistLoadedState { loadedModel | editWishModal = Just updatedEditModal }
                         Nothing ->
-                            ErrorState ("Could not update wish", "The application state was corrupted :(")
+                            ErrorState ("Wunsch konnte nicht aktualisiert werden", "Der Anwendungsstatus ist korrupt =(")
+            in
+            ( { model | state = state }, Cmd.none )
+
+        EditWishUrl newUrl ->
+            let
+                state =
+                    case loadedModel.editWishModal of
+                        Just modal ->
+                            let
+                                wish = modal.wish
+                                updatedWish = { wish | urls = if newUrl |> String.isEmpty then [] else [ newUrl ] }
+                                updatedEditModal = { modal | wish = updatedWish }
+                            in
+                            WishlistLoadedState { loadedModel | editWishModal = Just updatedEditModal }
+                        Nothing ->
+                            ErrorState ("Wunsch konnte nicht aktualisiert werden", "Der Anwendungsstatus ist korrupt =(")
             in
             ( { model | state = state }, Cmd.none )
             
@@ -724,7 +728,7 @@ updateWishlistLoaded msg loadedModel model =
                             in
                             WishlistLoadedState { loadedModel | editWishModal = Just updatedEditModal }
                         Nothing ->
-                            ErrorState ("Could not update wish", "The application state was corrupted :(")
+                            ErrorState ("Wunsch konnte nicht aktualisiert werden", "Der Anwendungsstatus ist korrupt =(")
             in
             ( { model | state = state }, Cmd.none )
             
@@ -775,7 +779,7 @@ updateLoadingWishlist msg loadingModel model =
                     let
                        _ = Debug.log "Retrieving the result of a create-new-wishlist-request is in error state" e
                     in
-                    ( { model | state = ErrorState ("Could not load the wish list", e |> httpErrorToString) }, Cmd.none )
+                    ( { model | state = ErrorState ("Wunschliste konnte nicht geladen werden", e |> httpErrorToString) }, Cmd.none )
 
 
 -- VIEW
@@ -785,11 +789,11 @@ mainView model =
     let
         title =
             case model.state of
-                WelcomeState _ -> "Wishes - Create a new, free wishlist here!"
-                NotFoundState -> "Wishes - Url not found :("
-                LoadingWishlistState _ -> "Wishes - Please wait while we load your wishlist"
+                WelcomeState _ -> "Wishes - Erstelle deine Wunschliste!"
+                NotFoundState -> "Wishes - Url nicht gefunden =("
+                LoadingWishlistState _ -> "Wishes - Liste wird geladen"
                 WishlistLoadedState loadedModel -> "Wishes - " ++ loadedModel.wishlist.name
-                ErrorState _ -> "Wishes - We ran into an error =("
+                ErrorState _ -> "Wishes - Es gab ein Problem =("
         view =
             case model.state of
                 WelcomeState m -> viewWelcome m
@@ -816,21 +820,21 @@ viewWelcome model =
     div [ Flex.block, Flex.justifyCenter, Flex.alignItemsCenter, style "height" "calc(100vh)" ]
     [
     div [ ]
-    [ h1 [] [ text "Create your free online wish list here"]
+    [ h1 [] [ text "Erstelle deine eigene Wunschliste =)"]
     , div [] 
       [ Form.form []
         [ Form.group []
           [ Form.label [ for "name" ] [ text "Name" ] 
           , Input.text [ Input.id "name", nameInput, onInput (\s -> MessageForWelcome (NameChange s))]
-          , Form.help [] [ text "The name will be displayed prominently on the wish list page"]
+          , Form.help [] [ text "Name der Wunschliste"]
           ]
         , Form.group []
-          [ Form.label [ for "description" ] [ text "Description" ]
+          [ Form.label [ for "description" ] [ text "Details" ]
           , Input.text [ Input.id "description", descriptionInput, onInput (\s -> MessageForWelcome (DescriptionChange s)) ]
-          , Form.help [ ] [ text "Add an optional description to the wish list to add some context"]
+          , Form.help [ ] [ text "Optionale Beschreibung der Wunschliste"]
           ]
         ]
-        , Button.button [ Button.primary, Button.onClick (MessageForWelcome CreateNewWishlist) ] [ text "Create" ]
+        , Button.button [ Button.primary, Button.onClick (MessageForWelcome CreateNewWishlist) ] [ text "Anlegen" ]
       ]
     ]
     ]
@@ -839,14 +843,14 @@ viewWelcome model =
 viewNotFound : Html Msg
 viewNotFound =
     div [ Flex.block, Flex.justifyCenter, Flex.alignItemsCenter, style "height" "calc(100vh)" ]
-    [ h1 [] [ text "404 - Page not found =("]
+    [ h1 [] [ text "404 - Seite nicht gefunden =("]
     ]
 
 
 viewLoadingWishlist : LoadingWishlistModel -> Html Msg
 viewLoadingWishlist _ =
     div [ Flex.block, Flex.justifyCenter, Flex.alignItemsCenter, style "height" "calc(100vh)" ]
-    [ h1 [] [ text "We are loading your wishlist, please wait..."]
+    [ h1 [] [ text "Wunschliste wird geladen, einen Moment bitte..."]
     ]
 
 -- View if a wishlist has been loaded
@@ -858,12 +862,12 @@ viewWishlistLoaded model loadedModel =
             loadedModel.wishlist.description
             |> Maybe.map (\t -> h4 [] [ text t ])
             |> Maybe.withDefault (div [] [])
-        formattedAge = createAgeText "Created just now! 😱" "Created " " ago" loadedModel.wishlist.creationTime model.now
+        formattedAge = createAgeText "Gerade eben angelegt! 😱" "Angelegt vor " "" loadedModel.wishlist.creationTime model.now
         isAuthTokenSet = loadedModel.currentToken |> Maybe.isJust
         token = (loadedModel.currentToken |> Maybe.withDefault "")
         wishes =
             if loadedModel.wishlist.wishes |> List.isEmpty then
-                h4 [ Spacing.mt2 ] [ text "There are no wishes on this list"]
+                h4 [ Spacing.mt2 ] [ text "Diese Liste hat aktuell keine Einträge"]
             else 
                 Html.ul [ class "list-group" ] ( loadedModel.wishlist.wishes |> List.map (viewWish isAuthTokenSet loadedModel.wishlist.id token model.now) )
         isAddButtonDisabled = loadedModel.newWishName |> String.isEmpty
@@ -871,18 +875,18 @@ viewWishlistLoaded model loadedModel =
             if loadedModel.currentToken |> Maybe.isJust then
                 Card.config [ Card.attrs [ Spacing.mt2, Spacing.mb2 ] ] 
                 |> Card.header [ class "text-center" ]
-                    [ Html.h5 [ Spacing.m0 ] [ text "Add new wish" ]
+                    [ Html.h5 [ Spacing.m0 ] [ text "Wunsch hinzufügen" ]
                     ]
                 |> Card.block []
                 [
                   Block.custom <|
                       (Form.form []
                         [ Form.group []
-                          [ Form.label [ for "newWishName" ] [ text "Wish" ]
+                          [ Form.label [ for "newWishName" ] [ text "Wunsch" ]
                           , Input.text [ Input.id "newWishName", Input.value loadedModel.newWishName, onInput (\x -> MessageForWishlistLoaded (NewWishNameChanged x)) ]
                           ]
                         , Form.group []
-                          [ Form.label [ for "newWishDescription" ] [ text "Description (optional)" ]
+                          [ Form.label [ for "newWishDescription" ] [ text "Details (optional)" ]
                           , Input.text [ Input.id "newWishDescription", Input.value loadedModel.newWishDescription, onInput (\x -> MessageForWishlistLoaded (NewWishDescriptionChanged x)) ]
                           ]
                         , Form.group []
@@ -891,12 +895,12 @@ viewWishlistLoaded model loadedModel =
                           ]
                         ])
                 , Block.custom <|
-                    (Button.button [ Button.primary, Button.attrs [ disabled isAddButtonDisabled, onClick (MessageForWishlistLoaded (AddWish loadedModel.wishlist.id token { name = loadedModel.newWishName, description = loadedModel.newWishDescription, url = loadedModel.newWishUrl } )) ] ] [ text "Add" ])
+                    (Button.button [ Button.primary, Button.attrs [ disabled isAddButtonDisabled, onClick (MessageForWishlistLoaded (AddWish loadedModel.wishlist.id token { name = loadedModel.newWishName, description = loadedModel.newWishDescription, url = loadedModel.newWishUrl } )) ] ] [ text "Hinzufügen" ])
                 ]
                 |> Card.view
             else
                 Card.config []
-                |> Card.block [] [ Block.text [] [ text "You cannot add or delete wishes from this wish list unless you have the matching admin token" ] ]
+                |> Card.block [] [ Block.text [] [ text "Wünsche können nicht ohne den Admin-Schlüssel hinzugefügt/gelöscht werden" ] ]
                 |> Card.view
         
         copyButtons =
@@ -907,11 +911,11 @@ viewWishlistLoaded model loadedModel =
                         adminUrl = userUrl ++ "?token=" ++ (loadedModel.currentToken |> Maybe.withDefault "")
                     in
                     if isAuthTokenSet then
-                        [ Button.button [ Button.primary, Button.attrs [ onClick (Copy userUrl) ] ] [ text "Copy link to share" ]
-                        , Button.button [ Button.primary, Button.attrs [ onClick (Copy adminUrl), Spacing.ml2 ] ] [ text "Copy admin link" ]
+                        [ Button.button [ Button.primary, Button.attrs [ onClick (Copy userUrl) ] ] [ text "Kopiere Teilen-Link" ]
+                        , Button.button [ Button.primary, Button.attrs [ onClick (Copy adminUrl), Spacing.ml2 ] ] [ text "Kopiere Admin-Link" ]
                         ]
                     else
-                        [ Button.button [ Button.primary, Button.attrs [ onClick (Copy "foo") ] ] [ text "Copy link to share" ] ]
+                        [ Button.button [ Button.primary, Button.attrs [ onClick (Copy userUrl) ] ] [ text "Kopiere Teilen-Link" ] ]
             in
             div [ Spacing.mt2, Spacing.mb2 ] buttons
             
@@ -919,8 +923,8 @@ viewWishlistLoaded model loadedModel =
             let
                 buttons =
                     if isAuthTokenSet then
-                        [ Button.button [ Button.outlineDark, Button.attrs [ onClick (Copy (loadedModel.wishlist.id |> UUID.toString)) ] ] [ text "Copy id"]
-                        , Button.button [ Button.outlineDark, Button.attrs [ onClick (Copy (loadedModel.currentToken |> Maybe.withDefault "")), Spacing.ml2 ] ] [ text "Copy token"]
+                        [ Button.button [ Button.outlineDark, Button.attrs [ onClick (Copy (loadedModel.wishlist.id |> UUID.toString)) ] ] [ text "Kopiere Id"]
+                        , Button.button [ Button.outlineDark, Button.attrs [ onClick (Copy (loadedModel.currentToken |> Maybe.withDefault "")), Spacing.ml2 ] ] [ text "Kopire Token"]
                         , Button.linkButton [ Button.outlineDark, Button.attrs [ href "https://www.icloud.com/shortcuts/090566f0339f4b61a3add7fd7e2c2c7e", Spacing.ml2, Spacing.p0 ] ] [ Html.img [ Html.Attributes.width 35, Html.Attributes.src "/shortcut.png" ] [] ]
                         ]
                     else []
@@ -956,10 +960,10 @@ viewWish showDeleteButton wishlistId authToken now wish =
             case wish.priority of
                 Just p ->
                     case p of
-                        Low -> "(not that important)"
-                        Moderate -> "(nice to have)"
-                        High -> "(want it)"
-                        VeryHigh -> "(strongly want it)"
+                        Low -> "(nicht so wichtig)"
+                        Moderate -> "(wäre nett)"
+                        High -> "(wichtig)"
+                        VeryHigh -> "(sehr wichtig)"
                 Nothing -> ""
         title =
             if wish.isCompleted then
@@ -972,7 +976,14 @@ viewWish showDeleteButton wishlistId authToken now wish =
             |> Maybe.map (\t -> Block.text [] [ text t ])
                 
         links =
-            wish.urls |> List.indexedMap (\i u -> Just (Block.link [ href u ] [ text ("Example " ++ ((i + 1) |> String.fromInt))]))
+            let
+                maxLength = 35
+                createName fullLink =
+                    if (fullLink |> String.length) > maxLength then
+                        (fullLink |> String.left maxLength) ++ "..."
+                    else fullLink
+            in
+            wish.urls |> List.map (\u -> Just (Block.link [ href u ] [ text (createName u)]))
 
         blocks =
             [ Just title
@@ -983,20 +994,20 @@ viewWish showDeleteButton wishlistId authToken now wish =
             let
                 (buttonText, buttonMsg) =
                     if wish.isCompleted then
-                        ("Mark as not bought", MessageForWishlistLoaded (MarkWishAsNotCompleted wishlistId wish.id))
+                        ("Als nicht gekauft markieren", MessageForWishlistLoaded (MarkWishAsNotCompleted wishlistId wish.id))
                     else
-                        ("Mark as bought", MessageForWishlistLoaded (MarkWishAsCompleted wishlistId wish.id))
+                        ("Als gekauft markieren", MessageForWishlistLoaded (MarkWishAsCompleted wishlistId wish.id))
             in
             Just (Button.button [ Button.primary, Button.small, Button.attrs [ Spacing.mr2, onClick buttonMsg ] ] [ text buttonText ])
 
         deletionButton =
             if showDeleteButton then
-                Just (Button.button [ Button.danger, Button.small, Button.attrs [ onClick (MessageForWishlistLoaded (DeleteWish wishlistId wish.id authToken)) ] ] [ text "Delete"])
+                Just (Button.button [ Button.danger, Button.small, Button.attrs [ Html.Attributes.style "width" "35px", onClick (MessageForWishlistLoaded (DeleteWish wishlistId wish.id authToken)) ] ] [ text "☓"])
             else Nothing
             
         editButton =
             if showDeleteButton then
-                Just (Button.button [ Button.primary, Button.small, Button.attrs [ Spacing.mr2, onClick (MessageForWishlistLoaded (ShowEditWishModal wish)) ] ] [ text "Edit"])
+                Just (Button.button [ Button.primary, Button.small, Button.attrs [ Html.Attributes.style "width" "35px", Spacing.mr2, onClick (MessageForWishlistLoaded (ShowEditWishModal wish)) ] ] [ text "🖉"])
             else Nothing
             
         buttons =
@@ -1004,11 +1015,13 @@ viewWish showDeleteButton wishlistId authToken now wish =
             
         all = (List.append (List.append blocks links) [ buttons ]) |> Maybe.values
         
-        age = createAgeText "Added just now! 😱" "Added " " ago" wish.creationTime now
+        age = createAgeText "Gerade eben hinzugefügt! 😱" "Hinzugefügt vor " "" wish.creationTime now
         
         mutedClass = if wish.isCompleted then "text-muted" else ""
+        
+        background = if wish.isCompleted then style "background" "#e4e4e4" else style "" ""
     in
-    Card.config [ Card.attrs [ class mutedClass, Spacing.mb2 ] ]
+    Card.config [ Card.attrs [ class mutedClass, Spacing.mb2, background ] ]
         |> Card.block [] all
         |> Card.footer [] [ small [] [ text age ] ]
         |> Card.view
@@ -1020,33 +1033,51 @@ viewEditWishModal visibility editModel =
         createSelect selectPriority selectValue selectName =
             Select.item [ Html.Attributes.value selectValue, Html.Attributes.selected (selectPriority == editModel.wish.priority) ] [ text selectName ] 
             
-        name = Input.text [ Input.id "editWishName", editModel.wish.name |> Input.value, Input.attrs [ Spacing.mb2 ] , onInput (\s -> MessageForWishlistLoaded (EditWishName s)) ]
-        description = Input.text [ Input.id "editWishDescription", (editModel.wish.description |> Maybe.withDefault "") |> Input.value, Input.attrs [ Spacing.mb2 ], onInput (\s -> MessageForWishlistLoaded (EditWishDescription s)) ]
+        name = Input.text [ Input.placeholder "Name", Input.id "editWishName", editModel.wish.name |> Input.value, Input.attrs [ Spacing.mb2 ] , onInput (\s -> MessageForWishlistLoaded (EditWishName s)) ]
+        description = Input.text [ Input.placeholder "Details", Input.id "editWishDescription", (editModel.wish.description |> Maybe.withDefault "") |> Input.value, Input.attrs [ Spacing.mb2 ], onInput (\s -> MessageForWishlistLoaded (EditWishDescription s)) ]
         priority = Select.select [ Select.id "editWishPriority", Select.onChange (\p -> MessageForWishlistLoaded (EditWishPriority p)) ]
-                    [ createSelect Nothing "none" "None"
-                    , createSelect (Just Low) "low" "not that important"
-                    , createSelect (Just Moderate) "moderate" "nice to have"
-                    , createSelect (Just High) "high" "want it"
-                    , createSelect (Just VeryHigh) "veryhigh" "strongly want it"
+                    [ createSelect Nothing "none" "(keine)"
+                    , createSelect (Just Low) "low" "nicht so wichtig"
+                    , createSelect (Just Moderate) "moderate" "wäre nett"
+                    , createSelect (Just High) "high" "wichtig"
+                    , createSelect (Just VeryHigh) "veryhigh" "sehr wichtig"
                     ]
+        
+        url =
+            let
+                val =
+                    editModel.wish.urls |> List.head |> Maybe.withDefault ""
+            in
+            Input.url 
+                [ Input.placeholder "Link"
+                , Input.id "editWishUrl"
+                , val |> Input.value
+                , onInput (\u -> MessageForWishlistLoaded (EditWishUrl u))
+                , Input.attrs 
+                    [ Spacing.mt2
+                    ]
+                ]
+    
+        body =
+            [ name, description, priority, url ]
     in
     Modal.config (MessageForWishlistLoaded CloseEditWishModal)
         |> Modal.large
         |> Modal.hideOnBackdropClick True
-        |> Modal.h3 [] [ text "Edit wish" ]
-        |> Modal.body [] [ name, description, priority ]
+        |> Modal.h3 [] [ text "Wunsch bearbeiten" ]
+        |> Modal.body [] body --[ name, description, priority, separator ]
         |> Modal.footer []
             [ Button.button
                 [ Button.outlineDanger
                 , Button.attrs [ onClick (MessageForWishlistLoaded CloseEditWishModal) ]
                 ]
-                [ text "Cancel"
+                [ text "Abbrechen"
                 ]
             , Button.button
                 [ Button.outlinePrimary
                 , Button.attrs [ onClick (MessageForWishlistLoaded SaveUpdatedWish) ]
                 ]
-                [ text "Save"
+                [ text "Speichern"
                 ]
             ]
         |> Modal.view visibility
@@ -1057,7 +1088,7 @@ viewErrorState (error, details) =
     div [ Flex.block, Flex.justifyCenter, Flex.alignItemsCenter, style "height" "calc(100vh)" ]
     [
       div []
-      [ h1 [] [ text "Sorry, we encountered an error"]
+      [ h1 [] [ text "Entschuldigung, es kam zu einem Fehler =("]
       , h4 [] [ text error ]
       , small [] [ text details ]
       ]
@@ -1077,10 +1108,10 @@ createAgeText justNowText prefix suffix start end =
         ageInYears = age |> Duration.inJulianYears
         formattedAge =
             if ageInSeconds <= 10 then justNowText
-            else if ageInMinutes <= 1 then prefix ++ (ageInSeconds |> Round.floor 0) ++ " seconds" ++ suffix
-            else if ageInHours <= 1 then prefix ++ (ageInMinutes |> Round.floor 0) ++ " minutes" ++ suffix
-            else if ageInDays <= 1 then prefix ++ (ageInHours |> Round.floor 0) ++ " hours" ++ suffix
-            else if ageInMonths <= 1 then prefix ++ (ageInDays |> Round.floor 0) ++ " days" ++ suffix
-            else if ageInYears <= 1 then prefix ++ (ageInMonths |> Round.floor 0) ++ " months" ++ suffix
-            else prefix ++ (ageInYears |> Round.floor 0) ++ " years" ++ suffix
+            else if ageInMinutes <= 1 then prefix ++ (ageInSeconds |> Round.floor 0) ++ " Sekunden" ++ suffix
+            else if ageInHours <= 1 then prefix ++ (ageInMinutes |> Round.floor 0) ++ " Minuten" ++ suffix
+            else if ageInDays <= 1 then prefix ++ (ageInHours |> Round.floor 0) ++ " Stunden" ++ suffix
+            else if ageInMonths <= 1 then prefix ++ (ageInDays |> Round.floor 0) ++ " Tagen" ++ suffix
+            else if ageInYears <= 1 then prefix ++ (ageInMonths |> Round.floor 0) ++ " Monaten" ++ suffix
+            else prefix ++ (ageInYears |> Round.floor 0) ++ " Jahren" ++ suffix
     in formattedAge
